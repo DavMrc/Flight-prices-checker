@@ -18,3 +18,9 @@ That is why I also wanted to filter for total trip duration, which luckily is al
 Thanks to [this library](https://github.com/krisukox/google-flights-api) I developed a couple of Go functions that I published on Google Cloud Platform under Cloud Functions.
 
 In the published notebook, you can see a demo of the code to travel to Madeira, a magic, unreal island that stole my heart a while ago.
+
+## Future improvements
+- allow the selection of a city rather than an airport to depart from/land to
+- localize the results (currency, airport names etc.)
+- develop a visual interface to dynamically change the input parameters
+- develop a visual interface to visualize the results
