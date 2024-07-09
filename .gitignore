@@ -1,5 +1,7 @@
 .ipynb_checkpoints
 .vscode
+scripts/
+venv/
 
 # This file collects my private GCP Cloud Functions endpoints
 endpoints.json
