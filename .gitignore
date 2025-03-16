@@ -1,7 +1,10 @@
 .ipynb_checkpoints
 .vscode
-scripts/
+data/
 venv/
+
+scripts/local_golang_interpreter/
+scripts/__pycache__/
 
 # This file collects my private GCP Cloud Functions endpoints
 endpoints.json
