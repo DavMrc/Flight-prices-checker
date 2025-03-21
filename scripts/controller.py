@@ -32,7 +32,6 @@ class FlightsController:
 
         # Dictionary to store the authorization tokens
         self.auth_tokens = {}
-        self.authenticate_endpoints_with_threads()
         
     def authenticate_endpoints_with_threads(self):
         threads = []
@@ -76,6 +75,7 @@ class FlightsController:
         return ls
 
     def get_price_graph(self, params: dict) -> pd.DataFrame:
+        logging.info(f"API Request for getPriceGraph\n{params}")
         response = requests.post(
             url=self.endpoints["getPriceGraph"],
             data=params,

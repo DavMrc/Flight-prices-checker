@@ -13,7 +13,9 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     if "controller" not in st.session_state:
-        st.session_state["controller"] = FlightsController()
+        controller = FlightsController()
+        controller.authenticate_endpoints_with_threads()
+        st.session_state["controller"] = controller
     
     if "interface" not in st.session_state:
         st.session_state["interface"] = FlightPricesChecker()
