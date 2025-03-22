@@ -102,10 +102,6 @@ class FlightsController:
 
         priceChart_df.sort_values(["startDate", "returnDate"], inplace=True)
         priceChart_df.reset_index(inplace=True, drop=True)
-
-        if params["maxPrice"]:
-            priceChart_df = priceChart_df[priceChart_df["Price"] <= params["maxPrice"]]
-        
         priceChart_df[["startDate", "returnDate"]] = priceChart_df[["startDate", "returnDate"]].apply(pd.to_datetime)
         
         return priceChart_df
@@ -237,9 +233,10 @@ class FlightsController:
                 })
             grouped.reset_index(inplace=True)
             grouped["layovers"] = grouped["chainID"] - 1
-            grouped["totalDuration"] = pd.to_timedelta(grouped["arrivalTime"] - grouped["departureTime"])
+            grouped["totalDuration"] = pd.to_timedelta(
+                grouped["arrivalTime"] - grouped["departureTime"]
+            ).dt.total_seconds() // 60
 
-            # grouped.drop("chainID", axis=1, inplace=True)
             return grouped
         
         outb_df = group(outb_df)
@@ -254,8 +251,6 @@ class FlightsController:
         )
         
         full_offers["fullPrice"] = full_offers["price_Outbound"] + full_offers["price_Inbound"]
-        full_offers["fullDuration"] = (full_offers["totalDuration_Outbound"] + full_offers["totalDuration_Inbound"])\
-                                        .dt.total_seconds() // 60
 
         full_offers = full_offers[[
             # Outbound
@@ -264,27 +259,52 @@ class FlightsController:
             "arrivalAirport_Outbound",
             "departureTime_Outbound",
             "arrivalTime_Outbound",
+            "totalDuration_Outbound",
             # Inbound
             "offerID_Inbound",
             "departureAirport_Inbound",
             "arrivalAirport_Inbound",
             "departureTime_Inbound",
             "arrivalTime_Inbound",
-            # Total duration and price
+            "totalDuration_Inbound",
+            # Total price
             "fullPrice",
-            "fullDuration"
         ]]
 
         if filter:
-            # By full price
-            full_offers = full_offers[
-                full_offers["fullPrice"] <= params["maxPrice"]
-            ]
-
-            # By full duration
-            full_offers = full_offers[
-                full_offers["fullDuration"] <= params["maxDuration"]
-            ]
+            full_offers = self.filter_merged_offers(full_offers, params)
 
         full_offers.reset_index(drop=True, inplace=True)
         return full_offers
+
+    def filter_merged_offers(self, merged_df: pd.DataFrame, params: dict) -> pd.DataFrame:
+        """
+        Filters merged offers based on `params["maxPrice"]` and `params["maxDuration"]`
+        """
+        
+        # By full price
+        if params["maxPrice"] > 0:
+            merged_df = merged_df[
+                merged_df["fullPrice"] <= params["maxPrice"]
+            ]
+
+        # By full duration
+        if params["maxDuration"] > 0:
+            merged_df = merged_df[
+                (merged_df["totalDuration_Inbound"] <= params["maxDuration"]) &
+                (merged_df["totalDuration_Outbound"] <= params["maxDuration"])
+            ]
+
+        return merged_df
+
+    def _filter_merged_df_on_max_duration(self, max_duration: int, merged_df: pd.DataFrame) -> pd.DataFrame:
+        merged_df = merged_df[
+            (merged_df['totalDuration_Inbound'] <= max_duration) &
+            (merged_df['totalDuration_Outbound'] <= max_duration)
+        ]        
+        return merged_df
+
+    def _concat_offers_duration(self, merged_df: pd.DataFrame) -> pd.Series:
+        inb_duration_minutes = merged_df["totalDuration_Inbound"]
+        outb_duration_minutes = merged_df["totalDuration_Outbound"]
+        return pd.concat([inb_duration_minutes, outb_duration_minutes])
