@@ -3,7 +3,9 @@ import plotly.express as px
 import pandas as pd
 import datetime
 import logging
+from my_enums import TripType
 from controller import FlightsController
+from helpers import fmt_duration
 
 
 class FlightPricesChecker:
@@ -11,7 +13,9 @@ class FlightPricesChecker:
         logging.info("Initializing FlightPricesChecker...")
         self.controller: FlightsController = st.session_state["controller"]
 
-        self.airports_json = self.controller.get_airports_json()
+        if "airports_json" not in st.session_state:
+            airports_json = self.controller.get_airports_json()
+            st.session_state["airports_json"] = airports_json
 
     def __keep(self, key):
         # https://stackoverflow.com/a/76211845
@@ -23,78 +27,6 @@ class FlightPricesChecker:
         else:
             return option["name"]
 
-    def __fmt_duration(self, duration: datetime.timedelta) -> str:
-        """
-        Formats a `datetime.timedelta` object into a string of format `05 hrs 45 min`
-        """
-        hours, remainder = divmod(duration.total_seconds(), 60*60)
-        minutes = remainder // 60
-        return f"{int(hours):02} hrs {int(minutes):02} min"
-
-    def __card_title_fmt(self, df: pd.DataFrame) -> str:
-        dep_date_fmt = df["startDate"].iloc[0].strftime("%a %d %b")
-        total_duration_fmt = self.__fmt_duration(df["arrivalTime"].iloc[-1] - df["departureTime"].iloc[0])
-        layovers = len(df)-1
-        price = df["price"].iloc[0].astype(str) +"€"
-
-        return f'##### {dep_date_fmt} | {price}\n{total_duration_fmt} | {layovers} stops'
-
-    def __full_offer_title_fmt(self, row: pd.DataFrame) -> str:
-        dep_date_fmt = row.departureTime_Outbound.strftime("%a %d %b")
-        ret_date_fmt = row.departureTime_Inbound.strftime("%a %d %b")
-        price = str(row.fullPrice) +"€"
-
-        return f'{dep_date_fmt} - {ret_date_fmt} | {price}'
-
-    def _offer_card(self, df):
-        rows = list(df.itertuples(index=False))
-        nrows = len(rows)
-        for i, row in enumerate(rows):
-            # Departure
-            dep_time = row.departureTime.strftime("%H:%M")
-            dep_airport = row.departureAirport
-
-            # Duration
-            duration = datetime.timedelta(minutes=row.flightDuration)
-            formatted_time = self.__fmt_duration(duration)
-
-            # Arrival
-            arr_time = row.arrivalTime.strftime("%H:%M")
-            arr_airport = row.arrivalAirport
-            divider = "---" if i != nrows-1 else ""
-
-            st.markdown(f'''
-                - **{dep_time}** · {dep_airport}
-                    - <span style="font-size: smaller; font-weight: lighter;">Travel time: {formatted_time}</span>
-                - **{arr_time}** · {arr_airport}
-                {divider}
-                ''',
-                unsafe_allow_html=True
-            )
-
-            try:
-                # Layover duration
-                layover_duration = (rows[i+1].departureTime - row.arrivalTime).to_pytimedelta()
-                formatted_time = self.__fmt_duration(layover_duration)
-
-                st.markdown(f"- Layover: h{formatted_time} · {row.arrivalAirport}\n---")
-            except IndexError:
-                # flight combination has no (or no-more) layovers
-                pass
-
-    def _full_offer_expander(self, title: str, outdf: pd.DataFrame, indf: pd.DataFrame):
-        with st.expander(title):
-            col1, col2 = st.columns(2, border=True)
-
-            with col1:
-                subtitle = self.__card_title_fmt(outdf)
-                st.markdown(subtitle)
-                self._offer_card(outdf)
-            with col2:
-                subtitle = self.__card_title_fmt(indf)
-                st.markdown(subtitle)
-                self._offer_card(indf)
-
     def run(self):
         self.__home_pg = st.Page(self.home, title="Home")
         self.__flights_pg = st.Page(self.flights, title="Flights")
@@ -102,8 +34,8 @@ class FlightPricesChecker:
 
         nav = st.navigation(
             [
-                # self.__home_pg,
-                # self.__flights_pg,
+                self.__home_pg,
+                self.__flights_pg,
                 self.__offers_pg
             ],
             position="hidden"
@@ -116,61 +48,27 @@ class FlightPricesChecker:
         st.title("Flight Prices Checker")
 
         # Dropdown to select between "iata code" and "airport name"
-        if "search_by" not in st.session_state:
-            st.session_state["search_by"] = "iata code"
-
-        st.radio("Search by", ["iata code", "airport name"], horizontal=True, key="_search_by",
-                 on_change=self.__keep, args=["search_by"])
+        UIComponents.search_by_picker(on_change=self.__keep)
         
         # Airport selectboxes side by side
-        col1, col2 = st.columns(2)
-        with col1:
-            ix = 0
-            if "dep_airport" in st.session_state:
-                ix = st.session_state["dep_airport"]["index"]
-
-            st.selectbox("Departure", options=self.airports_json, key="_dep_airport", index=ix,
-                         format_func=self.__airport_option_fmt,
-                         on_change=self.__keep, args=["dep_airport"])
-        with col2:
-            ix = 0
-            if "arr_airport" in st.session_state:
-                ix = st.session_state["arr_airport"]["index"]
-
-            st.selectbox("Arrival", options=self.airports_json, key="_arr_airport", index=ix,
-                         format_func=self.__airport_option_fmt,
-                         on_change=self.__keep, args=["arr_airport"])
+        UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep)
 
         # Date range input
-        if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
-            min_date, max_date = st.session_state["date_range"]
-        else:
-            min_date = datetime.date.today()
-            max_date = datetime.date.today() + datetime.timedelta(days=1)
-
-        st.date_input("Select Date Range", value=(min_date, max_date), key="_date_range",
-                      on_change=self.__keep, args=["date_range"])
+        UIComponents.date_picker(on_change=self.__keep)
 
         # Range slider for minDays and maxDays
-        try:
-            min_days = 0
-            start_date, end_date = st.session_state["_date_range"]
-            max_days = (end_date - start_date).days
-            max_days = max(max_days, 1)
-
-            st.slider("Select range of days", 0, max_days, (min_days, max_days), key="_days_range",
-                      on_change=self.__keep, args=["days_range"])
-        except ValueError:
-            st.warning("Please select both start and end dates.")
+        UIComponents.min_max_days_picker(on_change=self.__keep)
 
         #  Navigate to next page
         # TODO: align right
-        st.page_link(self.__flights_pg, label="Search Flights", icon="🔍")
+        if st.button(label="Search Flights", icon="🔍"):
+            st.switch_page(self.__flights_pg)
 
     def flights(self):
         st.set_page_config(layout="wide")
 
-        st.page_link(self.__home_pg, icon="⬅", label="Back")
+        if st.button(label="Back", icon="⬅"):
+            st.session_state.pop("price_graph_df")
 
         start_date, end_date = st.session_state["date_range"]
         min_days, max_days = st.session_state["days_range"]
@@ -220,41 +118,22 @@ class FlightPricesChecker:
                 )
                 fig.update_layout(
                     bargap=0.2,
-                    height=max(1000, len(query_df) * 10),
+                    # height=max(1000, len(query_df) * 5),
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
         with col1:
             # Display selected airports
-            col1_sub, col2_sub = st.columns(2)
-            with col1_sub:
-                ix = st.session_state["dep_airport"]["index"]
-                st.selectbox("Departure", options=self.airports_json, key="_dep_airport", index=ix,
-                         format_func=self.__airport_option_fmt, disabled=True)
-
-            with col2_sub:
-                ix = st.session_state["arr_airport"]["index"]
-                st.selectbox("Arrival", options=self.airports_json, key="_arr_airport", index=ix,
-                         format_func=self.__airport_option_fmt, disabled=True)
+            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
 
             # Date range input
-            min_date, max_date = st.session_state["date_range"]
-            st.date_input("Select Date Range", value=(min_date, max_date), key="_date_range",
-                      disabled=True)
+            UIComponents.date_picker(on_change=self.__keep, disabled=True)
 
             # Range slider for minDays and maxDays
-            min_days, max_days = st.session_state["days_range"]
-            st.slider("Select range of days", 0, 30, (min_days, max_days), key="_days_range",
-                      disabled=True)
+            UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Initial max price
-            max_price = price_graph_df["Price"].max()
-            curr_price = max_price
-            if "_max_price" in st.session_state:
-                curr_price = st.session_state["_max_price"]
-
-            st.slider("Max Price", min_value=0, max_value=max_price, value=curr_price,
-                      key="_max_price", on_change=self.__keep, args=['max_price'])
+            UIComponents.max_price_picker(price_graph_df["Price"].max(), on_change=self.__keep)
 
         #  Navigate to next page        
         # TODO: align right
@@ -264,78 +143,31 @@ class FlightPricesChecker:
 
     def offers(self):
         st.set_page_config(layout="wide")
-        st.page_link(self.__flights_pg, icon="⬅", label="Back")
 
-        # ------
-        def convert_iso_dates(data):
-            arr_keys = ["_date_range", "date_range"]
-            
-            new_arr = []
-            for k in arr_keys:
-                for v in data[k]:
-                    date = datetime.date.fromisoformat(v)
-                    new_arr.append(date)
-                data[k] = new_arr
-                new_arr = []
-            
-            return data
-
-        import json
-        j = json.load(open('F:/Programmazione/Flight prices checker/scripts/Untitled-1.json', 'rb'))
-        j = convert_iso_dates(j)
-        st.session_state.update(j)
-
-        if "max_duration" not in st.session_state:
-            st.session_state["max_duration"] = 0
-
-        start_date, end_date = st.session_state["date_range"]
-        min_days, max_days = st.session_state["days_range"]
-        params = {
-            "departureAirport" : st.session_state["dep_airport"]["iata_code"],
-            "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
-            "startDate" : start_date.strftime("%Y-%m-%d"),
-            "returnDate" : end_date.strftime("%Y-%m-%d"),
-            "minDays" : min_days,
-            "maxDays" : max_days,
-            "maxPrice" : st.session_state["max_price"],
-            "maxDuration": st.session_state["max_duration"]
-        }
-        if "price_graph_df" not in st.session_state:
-            st.session_state["price_graph_df"] = self.controller.get_price_graph(params)
-
-        # -----
+        if st.button(label="Back", icon="⬅"):
+            st.switch_page(self.__flights_pg)
 
         col1, col2 = st.columns([0.2, 0.8])
         with col1:
             # Display selected airports
-            col1_sub, col2_sub = st.columns(2)
-            with col1_sub:
-                ix = st.session_state["dep_airport"]["index"]
-                st.selectbox("Departure", options=self.airports_json, key="_dep_airport", index=ix,
-                        format_func=self.__airport_option_fmt, disabled=True)
-
-            with col2_sub:
-                ix = st.session_state["arr_airport"]["index"]
-                st.selectbox("Arrival", options=self.airports_json, key="_arr_airport", index=ix,
-                        format_func=self.__airport_option_fmt, disabled=True)
+            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
 
             # Date range input
-            min_date, max_date = st.session_state["date_range"]
-            st.date_input("Select Date Range", value=(min_date, max_date), key="_date_range",
-                    disabled=True)
+            UIComponents.date_picker(on_change=self.__keep, disabled=True)
 
             # Range slider for minDays and maxDays
-            min_days, max_days = st.session_state["days_range"]
-            st.slider("Select range of days", 0, 30, (min_days, max_days), key="_days_range",
-                    disabled=True)
+            UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Initial max price
             max_price = st.session_state["max_price"]
-            st.number_input("Max Price", value=max_price, key="_max_price", disabled=True)
+            UIComponents.max_price_picker(max_price, disabled=True)
 
         with col2:
             start_date, end_date = st.session_state["date_range"]
             min_days, max_days = st.session_state["days_range"]
+
+            if "max_duration" not in st.session_state:
+                st.session_state["max_duration"] = 0
 
             params = {
                 "departureAirport" : st.session_state["dep_airport"]["iata_code"],
@@ -351,26 +183,15 @@ class FlightPricesChecker:
             if "merged_df" not in st.session_state:
                 with st.spinner(show_time=True):
                     price_graph_df = st.session_state["price_graph_df"]
-                    # outb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
-                    # inb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
-                    # merged_df = self.controller.merge_offers(outb_df, inb_df, params, filter=False)
-                    
-                    p = "F:/Programmazione/Flight prices checker/data/samples/"
-                    outb_df = pd.read_pickle(p+'outb_df.pkl')
-                    inb_df = pd.read_pickle(p+'inb_df.pkl')
-                    merged_df = pd.read_pickle(p+'merged_df.pkl')
-
-                    # outb_df.to_pickle(p+'outb_df.pkl')
-                    # inb_df.to_pickle(p+'inb_df.pkl')
-                    # merged_df.to_pickle(p+'merged_df.pkl')
+                    outb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
+                    inb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
+                    merged_df = self.controller.merge_offers(outb_df, inb_df, params, filter=False)
 
                 st.session_state["outb_df"] = outb_df
                 st.session_state["inb_df"] = inb_df
                 st.session_state["merged_df"] = merged_df
                 st.session_state["absolute_max_duration"] = self.controller._concat_offers_duration(merged_df).max()
 
-            outb_df: pd.DataFrame = st.session_state["outb_df"]
-            inb_df: pd.DataFrame = st.session_state["inb_df"]
             merged_df_orig: pd.DataFrame = st.session_state["merged_df"]
             merged_df = self.controller.filter_merged_offers(merged_df_orig, params)
 
@@ -382,53 +203,15 @@ class FlightPricesChecker:
                     merged_df = self.controller._filter_merged_df_on_max_duration(max_duration, merged_df_orig)
 
             if len(merged_df) > 0:
-                # Begin pagination
-                if "page_no" not in st.session_state:
-                    st.session_state["page_no"] = 0
+                # Offer list
                 per_page_rows = 5
-                last_page, remainder = divmod(len(merged_df), per_page_rows)
+                UIComponents.offer_list(merged_df, per_page_rows)
 
-                if remainder == 0:
-                    last_page -= 1
+                # Offer list page buttons
+                UIComponents.offer_pagination(merged_df, per_page_rows)
 
-                last_page = max(last_page, 1)
-                page_no = st.session_state["page_no"]
-                start_idx = page_no * per_page_rows
-                end_idx = (1 + page_no) * per_page_rows
-
-                unique_offers = merged_df[start_idx:end_idx]
-                for row in unique_offers.itertuples():
-                    outb_chunk = outb_df[row.offerID_Outbound == outb_df["offerID"]]
-                    inb_chunk = inb_df[row.offerID_Inbound == inb_df["offerID"]]
-
-                    # Raise error if either chunk is empty
-                    error_msg = " offers chunk is empty"
-                    if len(outb_chunk) == 0:
-                        raise ValueError("Outbound"+ error_msg)
-                    if len(inb_chunk) == 0:
-                        raise ValueError("Inbound"+ error_msg)
-
-                    # Format offer title
-                    title = self.__full_offer_title_fmt(row)
-                    self._full_offer_expander(title, outb_chunk, inb_chunk)
-                
-                # Page buttons
-                col1s, mid, col2s = st.columns([0.2, 0.6, 0.2])
-                with col1s:
-                    disabled = st.session_state["page_no"] == 0
-                    if st.button("Previous", disabled=disabled):
-                        if st.session_state["page_no"] > 0:
-                            st.session_state["page_no"] -= 1
-                with mid:
-                    # TODO: fix
-                    st.write(f'Page {st.session_state["page_no"]+1} / {last_page+1}')
-                with col2s:
-                    disabled = st.session_state["page_no"] == last_page
-                    if st.button("Next", disabled=disabled):
-                        if st.session_state["page_no"] < last_page:
-                            st.session_state["page_no"] += 1
-
-                # Combine flight durations
+                # -----
+                # Flight duration barchart
                 combined_durations = self.controller._concat_offers_duration(merged_df)
 
                 # Create bins of 2 hours (120 minutes)
@@ -437,7 +220,6 @@ class FlightPricesChecker:
                 # Calculate the count of flights in each bin
                 duration_counts = pd.cut(combined_durations, bins=bins).value_counts().sort_index()
 
-                # Create a df for the bar chart
                 duration_colname = 'Flight Duration'
                 count_colname = 'Count'
                 bin_colname = 'Bin'
@@ -458,12 +240,208 @@ class FlightPricesChecker:
                     showlegend=False
                 )
 
-                # Plot chart
                 st.plotly_chart(fig)
             else:
-                st.write("Oh no i'm gay")
+                st.write("There are no offers matching the applied filters.")
 
             # Max duration slider
-            max_val = st.session_state["absolute_max_duration"] / 60
-            st.slider("Max duration", min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
-                      key="_max_duration", on_change=self.__keep, args=['max_duration'])
+            UIComponents.max_duration_picker(on_change=self.__keep)
+
+
+class UIComponents:
+    """
+    A class that holds standard, reusable widgets to be used in pages of the app
+    """
+    @staticmethod
+    def search_by_picker(**kwargs):
+        if "search_by" not in st.session_state:
+            st.session_state["search_by"] = "iata code"
+
+        st.radio("Search by", ["iata code", "airport name"], horizontal=True, key="_search_by",
+                 args=["search_by"], **kwargs)
+
+    @staticmethod
+    def airport_pickers(**kwargs):
+        airports_json = st.session_state["airports_json"]
+        col1, col2 = st.columns(2)
+        with col1:
+            ix = 0
+            if "dep_airport" in st.session_state:
+                ix = st.session_state["dep_airport"]["index"]
+
+            st.selectbox("Departure", options=airports_json, key="_dep_airport", index=ix,
+                         args=["dep_airport"], **kwargs)
+        with col2:
+            ix = 0
+            if "arr_airport" in st.session_state:
+                ix = st.session_state["arr_airport"]["index"]
+
+            st.selectbox("Arrival", options=airports_json, key="_arr_airport", index=ix,
+                         args=["arr_airport"], **kwargs)
+
+    @staticmethod
+    def date_picker(**kwargs):
+        # TODO: selezionare un range di date e tentare di modificarlo
+        # fa andare a fanculo la UI
+        if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
+            range_min_date, range_max_date = st.session_state["date_range"]
+        else:
+            range_min_date = datetime.date.today()
+            range_max_date = datetime.date.today() + datetime.timedelta(days=1)
+
+        st.date_input("Select Date Range", value=(range_min_date, range_max_date), min_value=datetime.date.today(),
+                      key="_date_range", args=["date_range"], **kwargs)
+
+    @staticmethod
+    def min_max_days_picker(**kwargs):
+        try:
+            if "date_range" not in st.session_state:
+                tup = (datetime.date.today(), datetime.date.today() + datetime.timedelta(days=1))
+                st.session_state["date_range"] = tup
+
+            start_date, end_date = st.session_state["date_range"]
+            min_days = 0
+            max_days = (end_date - start_date).days
+            max_days = max(max_days, 1)
+
+            st.slider("Select range of days", 0, max_days, (min_days, max_days),
+                        key="_days_range", args=["days_range"], **kwargs)
+        except ValueError:
+            # The user has only selected one of start/end date, thus
+            # the other is null
+            st.warning("Please select both start and end dates.")
+
+    @staticmethod
+    def max_price_picker(limit_max_price:int, **kwargs):
+        if "max_price" in st.session_state:
+            curr_price = st.session_state["max_price"]
+        else:
+            curr_price = limit_max_price
+
+        st.slider("Max Price", min_value=0, max_value=limit_max_price, value=curr_price,
+                    key="_max_price", args=['max_price'], **kwargs)
+
+    @staticmethod
+    def max_duration_picker(**kwargs):
+        max_val = st.session_state["absolute_max_duration"] / 60
+        st.slider("Max duration", min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
+                    key="_max_duration", args=["max_duration"], **kwargs)
+
+    # Flight offers widgets
+    @staticmethod
+    def offer(title: str, outdf: pd.DataFrame, indf: pd.DataFrame):
+        with st.expander(title):
+            col1, col2 = st.columns(2, border=True)
+
+            with col1:
+                subtitle = UIComponents.__card_title_fmt(outdf)
+                st.markdown(subtitle)
+                UIComponents.__offer_card(outdf)
+            with col2:
+                subtitle = UIComponents.__card_title_fmt(indf)
+                st.markdown(subtitle)
+                UIComponents.__offer_card(indf)
+
+    @staticmethod
+    def __offer_card(df: pd.DataFrame):
+        rows = list(df.itertuples(index=False))
+        nrows = len(rows)
+        for i, row in enumerate(rows):
+            # Departure
+            dep_time = row.departureTime.strftime("%H:%M")
+            dep_airport = row.departureAirport
+
+            # Duration
+            duration = datetime.timedelta(minutes=row.flightDuration)
+            formatted_time = fmt_duration(duration)
+
+            # Arrival
+            arr_time = row.arrivalTime.strftime("%H:%M")
+            arr_airport = row.arrivalAirport
+            divider = "---" if i != nrows-1 else ""
+
+            st.markdown(f'''
+                - **{dep_time}** · {dep_airport}
+                    - <span style="font-size: smaller; font-weight: lighter;">Travel time: {formatted_time}</span>
+                - **{arr_time}** · {arr_airport}
+                {divider}
+                ''',
+                unsafe_allow_html=True
+            )
+
+            try:
+                # Layover duration
+                layover_duration = (rows[i+1].departureTime - row.arrivalTime).to_pytimedelta()
+                formatted_time = fmt_duration(layover_duration)
+
+                st.markdown(f"- Layover: h{formatted_time} · {row.arrivalAirport}\n---")
+            except IndexError:
+                # flight combination has no (or no-more) layovers
+                pass
+
+    @staticmethod
+    def __card_title_fmt(df: pd.DataFrame):
+        dep_date_fmt = df["startDate"].iloc[0].strftime("%a %d %b")
+        total_duration_fmt = fmt_duration(df["arrivalTime"].iloc[-1] - df["departureTime"].iloc[0])
+        layovers = len(df)-1
+        price = df["price"].iloc[0].astype(str) +"€"
+
+        return f'##### {dep_date_fmt} | {price}\n{total_duration_fmt} | {layovers} stops'
+
+    @staticmethod
+    def __offer_title_fmt(row: pd.DataFrame) -> str:
+        dep_date_fmt = row.departureTime_Outbound.strftime("%a %d %b")
+        ret_date_fmt = row.departureTime_Inbound.strftime("%a %d %b")
+        price = str(row.fullPrice) +"€"
+
+        return f'{dep_date_fmt} - {ret_date_fmt} | {price}'
+
+    @staticmethod
+    def offer_list(merged_df: pd.DataFrame, per_page_rows: int):
+        outb_df: pd.DataFrame = st.session_state["outb_df"]
+        inb_df: pd.DataFrame = st.session_state["inb_df"]
+
+        if "page_no" not in st.session_state:
+            st.session_state["page_no"] = 0
+
+        page_no = st.session_state["page_no"]
+        start_idx = page_no * per_page_rows
+        end_idx = (1 + page_no) * per_page_rows
+
+        unique_offers = merged_df[start_idx:end_idx]
+        for row in unique_offers.itertuples():
+            outb_chunk = outb_df[row.offerID_Outbound == outb_df["offerID"]]
+            inb_chunk = inb_df[row.offerID_Inbound == inb_df["offerID"]]
+
+            # Raise error if either chunk is empty
+            error_msg = " offers chunk is empty"
+            if len(outb_chunk) == 0:
+                raise ValueError("Outbound"+ error_msg)
+            if len(inb_chunk) == 0:
+                raise ValueError("Inbound"+ error_msg)
+
+            # Format offer title
+            title = UIComponents.__offer_title_fmt(row)
+            UIComponents.offer(title, outb_chunk, inb_chunk)
+
+    @staticmethod
+    def offer_pagination(merged_df: pd.DataFrame, per_page_rows: int):
+        last_page, remainder = divmod(len(merged_df), per_page_rows)
+        if remainder == 0:
+            last_page -= 1
+        last_page = max(last_page, 1)
+
+        col1s, mid, col2s = st.columns([0.2, 0.6, 0.2])
+        with col1s:
+            disabled = st.session_state["page_no"] == 0
+            if st.button("Previous", disabled=disabled):
+                if st.session_state["page_no"] > 0:
+                    st.session_state["page_no"] -= 1
+        with mid:
+            # TODO: fix
+            st.write(f'Page {st.session_state["page_no"]+1} / {last_page+1}')
+        with col2s:
+            disabled = st.session_state["page_no"] == last_page
+            if st.button("Next", disabled=disabled):
+                if st.session_state["page_no"] < last_page:
+                    st.session_state["page_no"] += 1

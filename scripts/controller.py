@@ -106,30 +106,31 @@ class FlightsController:
         
         return priceChart_df
 
-    def get_offers(self, reference_df: pd.DataFrame, params:dict, trip_type: TripType) -> pd.DataFrame:
+    def get_offers(self, reference_df: pd.DataFrame, params: dict, trip_type: TripType) -> pd.DataFrame:
         """
         Takes advantage of `futures` to invoke `_get_offer_df()` in parallel
         """
+        # TODO: nella pagina offers, questo metodo viene chiamato almeno due volte
+        logging.info(f"API Request for getOffers\n{params}")
         getOffersToken = self.auth_tokens["getOffers"]
 
         # Setting parameters and columns
         departureAirport = None
         destinationAirport = None
+
         if trip_type == TripType.INBOUND:
+            reference_df = reference_df.copy()  # Ensure we're working with a copy to avoid warnings
             reference_df['fakeReturnDate'] = reference_df['returnDate'] + pd.to_timedelta(7, unit='d')
-            reference_df = reference_df.loc[:, ['returnDate', 'fakeReturnDate']]
-            reference_df.drop_duplicates(inplace=True, ignore_index=True)
-            reference_df.sort_values(['returnDate', 'fakeReturnDate'], inplace=True)
-            reference_df.reset_index(drop=True, inplace=True)
-            reference_df.rename({
-                'returnDate': 'startDate',
-                'fakeReturnDate': 'returnDate'
-            }, axis=1, inplace=True)
+            reference_df = reference_df[['returnDate', 'fakeReturnDate']].drop_duplicates(ignore_index=True)
+            reference_df = reference_df.sort_values(['returnDate', 'fakeReturnDate']).reset_index(drop=True)
+            reference_df = reference_df.rename(columns={'returnDate': 'startDate', 'fakeReturnDate': 'returnDate'})
 
             departureAirport = params["destinationAirport"]
             destinationAirport = params["departureAirport"]
         else:
-            reference_df.drop_duplicates(["startDate", "returnDate"], inplace=True, ignore_index=True)
+            reference_df = reference_df[['startDate', 'returnDate']].copy()  # Same as above
+            reference_df = reference_df.drop_duplicates(subset=['startDate', 'returnDate'], ignore_index=True)
+
             departureAirport = params["departureAirport"]
             destinationAirport = params["destinationAirport"]
 
