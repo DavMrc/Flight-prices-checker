@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import altair as alt
 import pandas as pd
 import datetime
 import logging
@@ -445,3 +446,95 @@ class UIComponents:
             if st.button("Next", disabled=disabled):
                 if st.session_state["page_no"] < last_page:
                     st.session_state["page_no"] += 1
+
+    # Charts
+    @staticmethod
+    def flight_count_heatmap(merged_df: pd.DataFrame):
+        df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
+                "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()
+        # Keep only the date part
+        df[["departureTime_Outbound", "departureTime_Inbound"]] = df[["departureTime_Outbound", "departureTime_Inbound"]]\
+                                                                .apply(lambda x: x.dt.date)
+
+        # Group by dates and count rows
+        heatmap_data = df.groupby(['departureTime_Outbound', 'departureTime_Inbound']).size()\
+                    .reset_index(name='Number of Flights')
+
+        # --- Scaffold data ---
+        # 
+        # Add all possible combinations between the minimum departure date and the
+        # maximum return date, imputing 0 number of flights. This ensures the
+        # heatmaps plots correctely a box for every cell value
+
+        # Find the overall min and max dates
+        min_date = min(heatmap_data['departureTime_Outbound'].min(), heatmap_data['departureTime_Inbound'].min())
+        max_date = max(heatmap_data['departureTime_Outbound'].max(), heatmap_data['departureTime_Inbound'].max())
+
+        # Create a complete date range
+        full_range = pd.date_range(start=min_date, end=max_date)
+        # Generate all possible combinations of departureTime_Outbound and full_range
+        all_combinations = pd.DataFrame(
+            [(outb.date(), inb.date()) for outb in full_range for inb in full_range],
+            columns=['departureTime_Outbound', 'departureTime_Inbound']
+        )
+
+        # Merge with existing heatmap_data to retain existing values
+        heatmap_data = all_combinations.merge(
+            heatmap_data,
+            on=['departureTime_Outbound', 'departureTime_Inbound'],
+            how='left'
+        )
+        # Fill missing 'Number of Flights' with 0
+        heatmap_data["Number of Flights"].fillna(0, inplace=True)
+
+        # Cast dates to datetime
+        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(pd.to_datetime)
+
+        # Format dates into strings of format "%a %d %b"
+        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%a %d %b"))
+
+        # Renames columns
+        outb_date_colname = "Departure Date"
+        inb_date_colname = "Return Date"
+        number_of_flights_colname = "Number of Flights"
+        heatmap_data.rename({
+            "departureTime_Outbound": outb_date_colname,
+            "departureTime_Inbound": inb_date_colname
+        }, axis=1, inplace=True)
+
+        # Create the heatmap
+        selection_point = alt.selection_point("selected_point", empty='none')
+
+        heatmap = alt.Chart(heatmap_data).mark_rect().encode(
+            x=alt.X(f'{inb_date_colname}:O', title=inb_date_colname).sort(),
+            y=alt.Y(f'{outb_date_colname}:O', title=outb_date_colname).sort(),
+            color=alt.Color(f'{number_of_flights_colname}:Q', scale=alt.Scale(scheme='blues')),
+            tooltip=[outb_date_colname, inb_date_colname, number_of_flights_colname]
+        ).properties(
+            # width=600,
+            height=400,
+            title="Flight Prices Heatmap"
+        ).add_params(selection_point)
+
+        # Display the heatmap in Streamlit
+        data = st.altair_chart(heatmap, on_select="rerun", use_container_width=True)
+        # Sample of return of a selection click
+        # {
+        #     "selection":{
+        #         "selected_point":[
+        #             {
+        #                 "Number of Flights":40,
+        #                 "Return Date":"Mon 14 Apr",
+        #                 "Departure Date":"Tue 08 Apr"
+        #             }
+        #         ]
+        #     }
+        # }
+
+        try:
+            selected_point = data["selection"]["selected_point"][0]
+            st.session_state["selected_heatmap_point"] = selected_point
+        except Exception:
+            pass
