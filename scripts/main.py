@@ -1,5 +1,6 @@
 import streamlit as st
 import logging
+import pandas as pd
 from interface import FlightPricesChecker
 from controller import FlightsController
 
@@ -12,6 +13,8 @@ logging.basicConfig(
 
 
 if __name__ == "__main__":
+    pd.options.mode.copy_on_write = True
+
     if "controller" not in st.session_state:
         controller = FlightsController()
         controller.authenticate_endpoints_with_threads()

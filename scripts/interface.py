@@ -204,49 +204,27 @@ class FlightPricesChecker:
                     merged_df = self.controller._filter_merged_df_on_max_duration(max_duration, merged_df_orig)
 
             if len(merged_df) > 0:
+                col1_s, col2_s = st.columns(2)
+                with col1_s:
+                    # Flight count heatmap
+                    UIComponents.flight_count_heatmap(merged_df)
+                
+                with col2_s:
+                    # Flight duration barchart
+                    combined_durations = self.controller._concat_offers_duration(merged_df)
+                    UIComponents.flight_duration_barchart(combined_durations)
+
+                    # Max duration slider
+                    UIComponents.max_duration_picker(on_change=self.__keep)
+
                 # Offer list
                 per_page_rows = 5
                 UIComponents.offer_list(merged_df, per_page_rows)
 
                 # Offer list page buttons
                 UIComponents.offer_pagination(merged_df, per_page_rows)
-
-                # -----
-                # Flight duration barchart
-                combined_durations = self.controller._concat_offers_duration(merged_df)
-
-                # Create bins of 2 hours (120 minutes)
-                bins = range(0, int(combined_durations.max())+120, 120)
-
-                # Calculate the count of flights in each bin
-                duration_counts = pd.cut(combined_durations, bins=bins).value_counts().sort_index()
-
-                duration_colname = 'Flight Duration'
-                count_colname = 'Count'
-                bin_colname = 'Bin'
-                duration_df = pd.DataFrame({
-                    duration_colname: [f'{interval.left //60}-{interval.right //60}h' for interval in duration_counts.index],
-                    count_colname: duration_counts.values,
-                    bin_colname: duration_counts.index
-                })
-
-                # Plot bar chart
-                fig = px.bar(duration_df, x=duration_colname, y=count_colname, color=count_colname,
-                            color_continuous_scale=px.colors.sequential.speed
-                )
-                fig.update_layout(
-                    yaxis={'fixedrange': True},
-                    xaxis={'fixedrange': True, 'tickangle': -90},
-                    dragmode=False,
-                    showlegend=False
-                )
-
-                st.plotly_chart(fig)
             else:
                 st.write("There are no offers matching the applied filters.")
-
-            # Max duration slider
-            UIComponents.max_duration_picker(on_change=self.__keep)
 
 
 class UIComponents:
@@ -485,15 +463,19 @@ class UIComponents:
             how='left'
         )
         # Fill missing 'Number of Flights' with 0
-        heatmap_data["Number of Flights"].fillna(0, inplace=True)
+        heatmap_data.fillna({"Number of Flights": 0}, inplace=True)
 
         # Cast dates to datetime
         heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
             heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(pd.to_datetime)
 
         # Format dates into strings of format "%a %d %b"
-        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+        heatmap_data[["departureTime_Outbound_fmt", "departureTime_Inbound_fmt"]] = \
             heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%a %d %b"))
+        
+        # Format dates themselves
+        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%Y-%m-%d"))
 
         # Renames columns
         outb_date_colname = "Departure Date"
@@ -501,40 +483,70 @@ class UIComponents:
         number_of_flights_colname = "Number of Flights"
         heatmap_data.rename({
             "departureTime_Outbound": outb_date_colname,
-            "departureTime_Inbound": inb_date_colname
+            "departureTime_Inbound": inb_date_colname,
+            "departureTime_Outbound_fmt": f"{outb_date_colname}_fmt",
+            "departureTime_Inbound_fmt": f"{inb_date_colname}_fmt",
         }, axis=1, inplace=True)
 
         # Create the heatmap
-        selection_point = alt.selection_point("selected_point", empty='none')
+        selection_point = alt.selection_point("selected_point", empty='none', fields=[outb_date_colname, inb_date_colname])
 
         heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-            x=alt.X(f'{inb_date_colname}:O', title=inb_date_colname).sort(),
-            y=alt.Y(f'{outb_date_colname}:O', title=outb_date_colname).sort(),
+            x=alt.X(f'{inb_date_colname}_fmt:O', title=inb_date_colname).sort(),
+            y=alt.Y(f'{outb_date_colname}_fmt:O', title=outb_date_colname).sort(),
             color=alt.Color(f'{number_of_flights_colname}:Q', scale=alt.Scale(scheme='blues')),
-            tooltip=[outb_date_colname, inb_date_colname, number_of_flights_colname]
         ).properties(
-            # width=600,
-            height=400,
             title="Flight Prices Heatmap"
         ).add_params(selection_point)
 
         # Display the heatmap in Streamlit
         data = st.altair_chart(heatmap, on_select="rerun", use_container_width=True)
-        # Sample of return of a selection click
-        # {
-        #     "selection":{
-        #         "selected_point":[
-        #             {
-        #                 "Number of Flights":40,
-        #                 "Return Date":"Mon 14 Apr",
-        #                 "Departure Date":"Tue 08 Apr"
-        #             }
-        #         ]
-        #     }
-        # }
-
         try:
             selected_point = data["selection"]["selected_point"][0]
             st.session_state["selected_heatmap_point"] = selected_point
         except Exception:
             pass
+        # Sample of return of a selection click
+        # {
+        #     "selection": {
+        #         "selected_point": [
+        #         {
+        #             "Number of Flights": 36,
+        #             "Return Date_fmt": "Tue 15 Apr",
+        #             "Departure Date_fmt": "Thu 10 Apr",
+        #             "Departure Date": "2025-04-10",
+        #             "Return Date": "2025-04-15"
+        #         }
+        #         ]
+        #     }
+        # }
+
+    @staticmethod
+    def flight_duration_barchart(combined_durations: pd.Series):
+        # Create bins of 2 hours (120 minutes)
+        bins = range(0, int(combined_durations.max())+120, 120)
+
+        # Calculate the count of flights in each bin
+        duration_counts = pd.cut(combined_durations, bins=bins).value_counts().sort_index()
+
+        duration_colname = 'Flight Duration'
+        count_colname = 'Count'
+        bin_colname = 'Bin'
+        duration_df = pd.DataFrame({
+            duration_colname: [f'{interval.left //60}-{interval.right //60}h' for interval in duration_counts.index],
+            count_colname: duration_counts.values,
+            bin_colname: duration_counts.index
+        })
+
+        # Plot bar chart
+        fig = px.bar(duration_df, x=duration_colname, y=count_colname, color=count_colname,
+                    color_continuous_scale=px.colors.sequential.speed
+        )
+        fig.update_layout(
+            yaxis={'fixedrange': True},
+            xaxis={'fixedrange': True, 'tickangle': -90},
+            dragmode=False,
+            showlegend=False
+        )
+
+        st.plotly_chart(fig)
