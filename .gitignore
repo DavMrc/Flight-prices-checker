@@ -6,5 +6,4 @@ venv/
 scripts/local_golang_interpreter/
 scripts/__pycache__/
 
-# This file collects my private GCP Cloud Functions endpoints
-endpoints.json
+notebooks/tests/
