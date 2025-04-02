@@ -209,6 +209,18 @@ class UIComponents:
     A class that holds standard, reusable widgets to be used in pages of the app
     """
 
+    __default_color_palette = {"scheme": "darkgreen", "reverse": True}
+    color_palette = __default_color_palette
+    @classmethod
+    def update_color_palette(cls, color_palette: dict=None):
+        """
+        Default: `{"scheme": "lightgreyred", "reverse": False}`
+        """
+        if not color_palette:
+            cls.color_palette = cls.__default_color_palette
+        
+        cls.color_palette = color_palette
+
     # Widgets
     @staticmethod
     def search_by_picker(**kwargs):
@@ -405,14 +417,14 @@ class UIComponents:
                     st.session_state["page_no"] += 1
 
     # Charts
-    @staticmethod
-    def gantt_chart(df: pd.DataFrame):
+    @classmethod
+    def gantt_chart(cls, df: pd.DataFrame):
         query_df = df.copy()
         gantt = alt.Chart(query_df).mark_bar().encode(
             x=alt.X('startDate:T', title=None),
             x2=alt.X2('returnDate:T', title=None),
             y=alt.Y('row_number:O', title=None, axis=None),
-            color=alt.Color('Price:Q'),
+            color=alt.Color('Price:Q').scale(**cls.color_palette),
             tooltip=['startDate:T', 'returnDate:T', alt.Tooltip('Price:Q', title='Price (€)')]
         ).transform_window(
             row_number='row_number()'
@@ -426,8 +438,8 @@ class UIComponents:
 
         st.altair_chart(gantt, use_container_width=True)
 
-    @staticmethod
-    def flight_count_heatmap(merged_df: pd.DataFrame):
+    @classmethod
+    def flight_count_heatmap(cls, merged_df: pd.DataFrame):
         df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
                 "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()
         # Keep only the date part
@@ -494,7 +506,7 @@ class UIComponents:
         heatmap = alt.Chart(heatmap_data).mark_rect().encode(
             x=alt.X(f'{inb_date_colname}_fmt:O', title=inb_date_colname).sort(),
             y=alt.Y(f'{outb_date_colname}_fmt:O', title=outb_date_colname).sort(),
-            color=alt.Color(f'{number_of_flights_colname}:Q'),
+            color=alt.Color(f'{number_of_flights_colname}:Q').scale(**cls.color_palette),
         ).properties(
             title="Flight Prices Heatmap"
         ).add_params(selection_point)
@@ -521,8 +533,8 @@ class UIComponents:
         #     }
         # }
 
-    @staticmethod
-    def flight_duration_barchart(combined_durations: pd.Series):
+    @classmethod
+    def flight_duration_barchart(cls, combined_durations: pd.Series):
         # Create bins of 2 hours (120 minutes)
         bins = range(0, int(combined_durations.max())+120, 120)
 
@@ -541,7 +553,7 @@ class UIComponents:
         chart = alt.Chart(duration_df).mark_bar().encode(
             x=alt.X('Flight Duration:N').sort(),
             y='Count:Q',
-            color=alt.Color('Count:Q'),
+            color=alt.Color('Count:Q').scale(**cls.color_palette),
             tooltip=['Flight Duration', 'Count']
         ).properties(
             title='Flight Duration vs Count'
