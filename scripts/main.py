@@ -1,6 +1,7 @@
-import streamlit as st
 import logging
+import streamlit as st
 import pandas as pd
+import altair as alt
 from interface import FlightPricesChecker
 from controller import FlightsController
 
@@ -14,6 +15,7 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
+    alt.theme.enable("powerbi")
 
     if "controller" not in st.session_state:
         controller = FlightsController()

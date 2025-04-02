@@ -1,5 +1,4 @@
 import streamlit as st
-import plotly.express as px
 import altair as alt
 import pandas as pd
 import datetime
@@ -98,30 +97,7 @@ class FlightPricesChecker:
                     query_df = price_graph_df[price_graph_df["Price"] <= max_price]
 
                 # Plot the chart
-                fig = px.timeline(query_df, x_start="startDate", x_end="returnDate", y=query_df.index,
-                    color="Price", color_continuous_scale=px.colors.sequential.speed,
-                    range_x=[query_df['startDate'].min(), query_df['returnDate'].max()],
-                    range_y=[query_df.index.min(), query_df.index.max()],
-                )
-                fig.update_yaxes(
-                    autorange="reversed",
-                    showticklabels=False,
-                    title_text='',
-                    fixedrange=True
-                )
-                fig.update_xaxes(
-                    fixedrange=True,
-                    tickangle=-90,
-                    tickmode='array',
-                    showgrid=True,
-                    gridwidth=1,
-                    gridcolor='LightGray'
-                )
-                fig.update_layout(
-                    bargap=0.2,
-                    # height=max(1000, len(query_df) * 5),
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                UIComponents.gantt_chart(query_df)
 
         with col1:
             # Display selected airports
@@ -218,6 +194,7 @@ class FlightPricesChecker:
                     UIComponents.max_duration_picker(on_change=self.__keep)
 
                 # Offer list
+                # TODO rendere parametrizzabile
                 per_page_rows = 5
                 UIComponents.offer_list(merged_df, per_page_rows)
 
@@ -231,6 +208,8 @@ class UIComponents:
     """
     A class that holds standard, reusable widgets to be used in pages of the app
     """
+
+    # Widgets
     @staticmethod
     def search_by_picker(**kwargs):
         if "search_by" not in st.session_state:
@@ -427,6 +406,27 @@ class UIComponents:
 
     # Charts
     @staticmethod
+    def gantt_chart(df: pd.DataFrame):
+        query_df = df.copy()
+        gantt = alt.Chart(query_df).mark_bar().encode(
+            x=alt.X('startDate:T', title=None),
+            x2=alt.X2('returnDate:T', title=None),
+            y=alt.Y('row_number:O', title=None, axis=None),
+            color=alt.Color('Price:Q'),
+            tooltip=['startDate:T', 'returnDate:T', alt.Tooltip('Price:Q', title='Price (€)')]
+        ).transform_window(
+            row_number='row_number()'
+        ).properties(
+            width=800,
+            height=400
+        ).configure_axisX(
+            tickCount="day",
+            labelAngle=-90
+        )
+
+        st.altair_chart(gantt, use_container_width=True)
+
+    @staticmethod
     def flight_count_heatmap(merged_df: pd.DataFrame):
         df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
                 "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()
@@ -494,7 +494,7 @@ class UIComponents:
         heatmap = alt.Chart(heatmap_data).mark_rect().encode(
             x=alt.X(f'{inb_date_colname}_fmt:O', title=inb_date_colname).sort(),
             y=alt.Y(f'{outb_date_colname}_fmt:O', title=outb_date_colname).sort(),
-            color=alt.Color(f'{number_of_flights_colname}:Q', scale=alt.Scale(scheme='blues')),
+            color=alt.Color(f'{number_of_flights_colname}:Q'),
         ).properties(
             title="Flight Prices Heatmap"
         ).add_params(selection_point)
@@ -531,22 +531,19 @@ class UIComponents:
 
         duration_colname = 'Flight Duration'
         count_colname = 'Count'
-        bin_colname = 'Bin'
+        # bin_colname = 'Bin'
         duration_df = pd.DataFrame({
             duration_colname: [f'{interval.left //60}-{interval.right //60}h' for interval in duration_counts.index],
             count_colname: duration_counts.values,
-            bin_colname: duration_counts.index
+            # bin_colname: duration_counts.index
         })
 
-        # Plot bar chart
-        fig = px.bar(duration_df, x=duration_colname, y=count_colname, color=count_colname,
-                    color_continuous_scale=px.colors.sequential.speed
+        chart = alt.Chart(duration_df).mark_bar().encode(
+            x=alt.X('Flight Duration:N').sort(),
+            y='Count:Q',
+            color=alt.Color('Count:Q'),
+            tooltip=['Flight Duration', 'Count']
+        ).properties(
+            title='Flight Duration vs Count'
         )
-        fig.update_layout(
-            yaxis={'fixedrange': True},
-            xaxis={'fixedrange': True, 'tickangle': -90},
-            dragmode=False,
-            showlegend=False
-        )
-
-        st.plotly_chart(fig)
+        st.altair_chart(chart, use_container_width=True)
