@@ -110,8 +110,7 @@ class FlightsController:
         """
         Takes advantage of `futures` to invoke `_get_offer_df()` in parallel
         """
-        # TODO: nella pagina offers, questo metodo viene chiamato almeno due volte
-        logging.info(f"API Request for getOffers\n{params}")
+        logging.info(f"API Request for {trip_type} getOffers\n{params}")
         getOffersToken = self.auth_tokens["getOffers"]
 
         # Setting parameters and columns

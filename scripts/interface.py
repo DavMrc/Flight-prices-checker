@@ -54,15 +54,16 @@ class FlightPricesChecker:
         UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep)
 
         # Date range input
-        UIComponents.date_picker(on_change=self.__keep)
+        UIComponents.date_picker()
 
         # Range slider for minDays and maxDays
         UIComponents.min_max_days_picker(on_change=self.__keep)
 
         #  Navigate to next page
-        # TODO: align right
-        if st.button(label="Search Flights", icon="🔍"):
-            st.switch_page(self.__flights_pg)
+        _, col = st.columns([0.8, 0.2])
+        with col:
+            if st.button(label="Search Flights", icon="🔍"):
+                st.switch_page(self.__flights_pg)
 
     def flights(self):
         st.set_page_config(layout="wide")
@@ -104,7 +105,7 @@ class FlightPricesChecker:
             UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
 
             # Date range input
-            UIComponents.date_picker(on_change=self.__keep, disabled=True)
+            UIComponents.date_picker(disabled=True)
 
             # Range slider for minDays and maxDays
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
@@ -113,10 +114,11 @@ class FlightPricesChecker:
             UIComponents.max_price_picker(price_graph_df["Price"].max(), on_change=self.__keep)
 
         #  Navigate to next page        
-        # TODO: align right
-        if st.button(label="Search Offers", icon="🔍"):
-            st.session_state["price_graph_df"] = query_df
-            st.switch_page(self.__offers_pg)
+        _, col = st.columns([0.8, 0.2])
+        with col:
+            if st.button(label="Search Offers", icon="🔍"):
+                st.session_state["price_graph_df"] = query_df
+                st.switch_page(self.__offers_pg)
 
     def offers(self):
         st.set_page_config(layout="wide")
@@ -130,7 +132,7 @@ class FlightPricesChecker:
             UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
 
             # Date range input
-            UIComponents.date_picker(on_change=self.__keep, disabled=True)
+            UIComponents.date_picker(disabled=True)
 
             # Range slider for minDays and maxDays
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
@@ -197,9 +199,6 @@ class FlightPricesChecker:
                 # TODO rendere parametrizzabile
                 per_page_rows = 5
                 UIComponents.offer_list(merged_df, per_page_rows)
-
-                # Offer list page buttons
-                UIComponents.offer_pagination(merged_df, per_page_rows)
             else:
                 st.write("There are no offers matching the applied filters.")
 
@@ -251,35 +250,37 @@ class UIComponents:
 
     @staticmethod
     def date_picker(**kwargs):
-        # TODO: selezionare un range di date e tentare di modificarlo
-        # fa andare a fanculo la UI
-        if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
-            range_min_date, range_max_date = st.session_state["date_range"]
-        else:
+        if "date_range" not in st.session_state:
             range_min_date = datetime.date.today()
-            range_max_date = datetime.date.today() + datetime.timedelta(days=1)
+            range_max_date = range_min_date + datetime.timedelta(days=1)
+            st.session_state["date_range"] = (range_min_date, range_max_date)
 
-        st.date_input("Select Date Range", value=(range_min_date, range_max_date), min_value=datetime.date.today(),
-                      key="_date_range", args=["date_range"], **kwargs)
+        range_min_date, range_max_date = st.session_state["date_range"]
+        selected_dates = st.date_input("Select Date Range", value=(range_min_date, range_max_date),
+                                        min_value=datetime.date.today(), **kwargs)
+
+        if len(selected_dates) == 2:
+            if st.session_state["date_range"] != selected_dates:
+                st.session_state["date_range"] = selected_dates
+                # When the user selected only one date, the execution stopped
+                # (see line below). Here, we rerun the app so that the app
+                # "restarts" working
+                st.rerun()
+        else:
+            # Prevent further processing until both dates are selected
+            st.warning("Please select both start and end dates.")
+            st.stop()
 
     @staticmethod
     def min_max_days_picker(**kwargs):
-        try:
-            if "date_range" not in st.session_state:
-                tup = (datetime.date.today(), datetime.date.today() + datetime.timedelta(days=1))
-                st.session_state["date_range"] = tup
-
+        if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
             start_date, end_date = st.session_state["date_range"]
             min_days = 0
             max_days = (end_date - start_date).days
             max_days = max(max_days, 1)
 
             st.slider("Select range of days", 0, max_days, (min_days, max_days),
-                        key="_days_range", args=["days_range"], **kwargs)
-        except ValueError:
-            # The user has only selected one of start/end date, thus
-            # the other is null
-            st.warning("Please select both start and end dates.")
+                    key="_days_range", args=["days_range"], **kwargs)
 
     @staticmethod
     def max_price_picker(limit_max_price:int, **kwargs):
