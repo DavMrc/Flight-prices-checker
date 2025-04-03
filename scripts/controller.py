@@ -219,7 +219,7 @@ class FlightsController:
         
         return pd.DataFrame(flights)
 
-    def merge_offers(self, outb_df: pd.DataFrame, inb_df: pd.DataFrame, params:dict, filter=True) -> pd.DataFrame:
+    def merge_offers(self, outb_df: pd.DataFrame, inb_df: pd.DataFrame) -> pd.DataFrame:
         def group(df) -> pd.DataFrame:
             grouped = df\
                 .groupby(['offerID', 'startDate', 'returnDate'])\
@@ -271,9 +271,6 @@ class FlightsController:
             "fullPrice",
         ]]
 
-        if filter:
-            full_offers = self.filter_merged_offers(full_offers, params)
-
         full_offers.reset_index(drop=True, inplace=True)
         return full_offers
 
@@ -289,7 +286,7 @@ class FlightsController:
             ]
 
         # By full duration
-        if params["maxDuration"] > 0:
+        if params["maxDuration"] > -1:
             merged_df = merged_df[
                 (merged_df["totalDuration_Inbound"] <= params["maxDuration"]) &
                 (merged_df["totalDuration_Outbound"] <= params["maxDuration"])
@@ -308,3 +305,84 @@ class FlightsController:
         inb_duration_minutes = merged_df["totalDuration_Inbound"]
         outb_duration_minutes = merged_df["totalDuration_Outbound"]
         return pd.concat([inb_duration_minutes, outb_duration_minutes])
+
+    def flight_duration_barchart(self, merged_df: pd.DataFrame) -> pd.DataFrame:
+        combined_durations = self._concat_offers_duration(merged_df)
+
+        # Create bins of 2 hours (120 minutes)
+        bin_size_in_minutes = 120
+        bins = range(0, int(combined_durations.max())+bin_size_in_minutes, bin_size_in_minutes)
+
+        # Calculate the count of flights in each bin
+        duration_counts = pd.cut(combined_durations, bins=bins).value_counts().sort_index()
+
+        duration_colname = 'Flight Duration'
+        count_colname = 'Count'
+        duration_df = pd.DataFrame({
+            duration_colname: [f'{interval.left //60}-{interval.right //60}h' for interval in duration_counts.index],
+            count_colname: duration_counts.values,
+        })
+
+        return duration_df
+
+    def flight_count_heatmap(self, merged_df: pd.DataFrame) -> pd.DataFrame:
+        df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
+                "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()
+        # Keep only the date part
+        df[["departureTime_Outbound", "departureTime_Inbound"]] = df[["departureTime_Outbound", "departureTime_Inbound"]]\
+                                                                .apply(lambda x: x.dt.date)
+
+        # Group by dates and count rows
+        heatmap_data = df.groupby(['departureTime_Outbound', 'departureTime_Inbound']).size()\
+                    .reset_index(name='Number of Flights')
+
+        # --- Scaffold data ---
+        # 
+        # Add all possible combinations between the minimum departure date and the
+        # maximum return date, imputing 0 number of flights. This ensures the
+        # heatmaps plots correctely a box for every cell value
+
+        # Find the overall min and max dates
+        min_date = min(heatmap_data['departureTime_Outbound'].min(), heatmap_data['departureTime_Inbound'].min())
+        max_date = max(heatmap_data['departureTime_Outbound'].max(), heatmap_data['departureTime_Inbound'].max())
+
+        # Create a complete date range
+        full_range = pd.date_range(start=min_date, end=max_date)
+        # Generate all possible combinations of departureTime_Outbound and full_range
+        all_combinations = pd.DataFrame(
+            [(outb.date(), inb.date()) for outb in full_range for inb in full_range],
+            columns=['departureTime_Outbound', 'departureTime_Inbound']
+        )
+
+        # Merge with existing heatmap_data to retain existing values
+        heatmap_data = all_combinations.merge(
+            heatmap_data,
+            on=['departureTime_Outbound', 'departureTime_Inbound'],
+            how='left'
+        )
+        # Fill missing 'Number of Flights' with 0
+        heatmap_data.fillna({"Number of Flights": 0}, inplace=True)
+
+        # Cast dates to datetime
+        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(pd.to_datetime)
+
+        # Format dates into strings of format "%a %d %b"
+        heatmap_data[["departureTime_Outbound_fmt", "departureTime_Inbound_fmt"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%a %d %b"))
+        
+        # Format dates themselves
+        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
+            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%Y-%m-%d"))
+
+        # Renames columns
+        outb_date_colname = "Departure Date"
+        inb_date_colname = "Return Date"
+        heatmap_data.rename({
+            "departureTime_Outbound": outb_date_colname,
+            "departureTime_Inbound": inb_date_colname,
+            "departureTime_Outbound_fmt": f"{outb_date_colname}_fmt",
+            "departureTime_Inbound_fmt": f"{inb_date_colname}_fmt",
+        }, axis=1, inplace=True)
+
+        return heatmap_data

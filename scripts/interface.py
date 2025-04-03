@@ -27,6 +27,35 @@ class FlightPricesChecker:
         else:
             return option["name"]
 
+    def __create_debug_session__(self):
+        if "debug" not in st.session_state:
+            import json
+            # Load dumped session state
+            path = "F:/Programmazione/Flight prices checker/data"
+            sess_state_debug: dict = json.load(open(path+"/debugging-st-session.json"))
+            sess_state: dict = sess_state_debug
+            date_cols = ["date_range", "_date_range"]
+
+            for col in date_cols:
+                parsed_date_list = []
+                for date_str in sess_state_debug[col]:
+                    parsed_date = datetime.datetime.fromisoformat(date_str).date()
+                    parsed_date_list.append(parsed_date)
+                
+                sess_state.update({col: parsed_date_list})
+            
+            st.session_state.update(sess_state)
+
+            # --- Load dataframes
+            inb_df = pd.read_pickle(path+"/samples/inb_df.pkl")
+            outb_df = pd.read_pickle(path+"/samples/outb_df.pkl")
+            merged_df_orig = pd.read_pickle(path+"/samples/merged_df_orig.pkl")
+
+            st.session_state["inb_df"] = inb_df
+            st.session_state["outb_df"] = outb_df
+            st.session_state["merged_df"] = merged_df_orig
+            st.session_state["debug"] = True
+
     def run(self):
         self.__home_pg = st.Page(self.home, title="Home")
         self.__flights_pg = st.Page(self.flights, title="Flights")
@@ -127,6 +156,66 @@ class FlightPricesChecker:
             st.switch_page(self.__flights_pg)
 
         col1, col2 = st.columns([0.2, 0.8])
+        # First displayed col2 so that session state is updated with
+        # all necessary values
+        with col2:
+            start_date, end_date = st.session_state["date_range"]
+            min_days, max_days = st.session_state["days_range"]
+
+            max_duration = -1
+            if "max_duration" in st.session_state:
+                max_duration = st.session_state["max_duration"] * 60
+
+            params = {
+                "departureAirport" : st.session_state["dep_airport"]["iata_code"],
+                "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
+                "startDate" : start_date.strftime("%Y-%m-%d"),
+                "returnDate" : end_date.strftime("%Y-%m-%d"),
+                "minDays" : min_days,
+                "maxDays" : max_days,
+                "maxPrice" : st.session_state["max_price"],
+                "maxDuration": max_duration
+            }
+
+            if "merged_df" not in st.session_state:
+                with st.spinner(show_time=True):
+                    price_graph_df = st.session_state["price_graph_df"]
+                    outb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
+                    inb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
+                    merged_df = self.controller.merge_offers(outb_df, inb_df)
+
+                st.session_state["outb_df"] = outb_df
+                st.session_state["inb_df"] = inb_df
+                st.session_state["merged_df"] = merged_df
+
+            merged_df_orig: pd.DataFrame = st.session_state["merged_df"]
+
+            if "absolute_max_duration" not in st.session_state:
+                st.session_state["absolute_max_duration"] = self.controller._concat_offers_duration(merged_df_orig).max()
+
+            if "max_duration" not in st.session_state:
+                st.session_state["max_duration"] = st.session_state["absolute_max_duration"]
+
+            merged_df = self.controller.filter_merged_offers(merged_df_orig, params)
+            if len(merged_df) > 0:
+                col1_s, col2_s = st.columns(2)
+                with col1_s:
+                    # Flight count heatmap
+                    heatmap_data = self.controller.flight_count_heatmap(merged_df)
+                    UIComponents.flight_count_heatmap(heatmap_data)
+                
+                with col2_s:
+                    # Flight duration barchart
+                    duration_df = self.controller.flight_duration_barchart(merged_df)
+                    UIComponents.flight_duration_barchart(duration_df)
+
+                # Offer list
+                # TODO rendere parametrizzabile
+                per_page_rows = 5
+                UIComponents.offer_list(merged_df, per_page_rows)
+            else:
+                st.write("There are no offers matching the applied filters.")
+        
         with col1:
             # Display selected airports
             UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
@@ -141,66 +230,8 @@ class FlightPricesChecker:
             max_price = st.session_state["max_price"]
             UIComponents.max_price_picker(max_price, disabled=True)
 
-        with col2:
-            start_date, end_date = st.session_state["date_range"]
-            min_days, max_days = st.session_state["days_range"]
-
-            if "max_duration" not in st.session_state:
-                st.session_state["max_duration"] = 0
-
-            params = {
-                "departureAirport" : st.session_state["dep_airport"]["iata_code"],
-                "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
-                "startDate" : start_date.strftime("%Y-%m-%d"),
-                "returnDate" : end_date.strftime("%Y-%m-%d"),
-                "minDays" : min_days,
-                "maxDays" : max_days,
-                "maxPrice" : st.session_state["max_price"],
-                "maxDuration": st.session_state["max_duration"]
-            }
-
-            if "merged_df" not in st.session_state:
-                with st.spinner(show_time=True):
-                    price_graph_df = st.session_state["price_graph_df"]
-                    outb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
-                    inb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
-                    merged_df = self.controller.merge_offers(outb_df, inb_df, params, filter=False)
-
-                st.session_state["outb_df"] = outb_df
-                st.session_state["inb_df"] = inb_df
-                st.session_state["merged_df"] = merged_df
-                st.session_state["absolute_max_duration"] = self.controller._concat_offers_duration(merged_df).max()
-
-            merged_df_orig: pd.DataFrame = st.session_state["merged_df"]
-            merged_df = self.controller.filter_merged_offers(merged_df_orig, params)
-
-            # Filter df based on selection made on the barchart (see below)
-            if "max_duration" in st.session_state:
-                max_duration: int = st.session_state["max_duration"] * 60
-
-                if max_duration and max_duration > 0:
-                    merged_df = self.controller._filter_merged_df_on_max_duration(max_duration, merged_df_orig)
-
-            if len(merged_df) > 0:
-                col1_s, col2_s = st.columns(2)
-                with col1_s:
-                    # Flight count heatmap
-                    UIComponents.flight_count_heatmap(merged_df)
-                
-                with col2_s:
-                    # Flight duration barchart
-                    combined_durations = self.controller._concat_offers_duration(merged_df)
-                    UIComponents.flight_duration_barchart(combined_durations)
-
-                    # Max duration slider
-                    UIComponents.max_duration_picker(on_change=self.__keep)
-
-                # Offer list
-                # TODO rendere parametrizzabile
-                per_page_rows = 5
-                UIComponents.offer_list(merged_df, per_page_rows)
-            else:
-                st.write("There are no offers matching the applied filters.")
+            # Max duration slider
+            UIComponents.max_duration_picker(on_change=self.__keep)
 
 
 class UIComponents:
@@ -295,12 +326,17 @@ class UIComponents:
     @staticmethod
     def max_duration_picker(**kwargs):
         max_val = st.session_state["absolute_max_duration"] / 60
-        st.slider("Max duration", min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
+        st.slider("Max duration", value=max_val, min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
                     key="_max_duration", args=["max_duration"], **kwargs)
 
     # Flight offers widgets
     @staticmethod
     def offer(title: str, outdf: pd.DataFrame, indf: pd.DataFrame):
+        """
+        UI Component that consists of a `st.expander` with 
+        two blocks side by side, each containing respectively
+        outbound and inbound flights.
+        """
         with st.expander(title):
             col1, col2 = st.columns(2, border=True)
 
@@ -315,6 +351,9 @@ class UIComponents:
 
     @staticmethod
     def __offer_card(df: pd.DataFrame):
+        """
+        UI component that represents a single flight offer inside of a card-like object
+        """
         rows = list(df.itertuples(index=False))
         nrows = len(rows)
         for i, row in enumerate(rows):
@@ -369,6 +408,9 @@ class UIComponents:
 
     @staticmethod
     def offer_list(merged_df: pd.DataFrame, per_page_rows: int):
+        """
+        UI component that shows a vertical list of exactely `per_page_rows` `UIComponents.offer()` elements. 
+        """
         outb_df: pd.DataFrame = st.session_state["outb_df"]
         inb_df: pd.DataFrame = st.session_state["inb_df"]
 
@@ -395,8 +437,7 @@ class UIComponents:
             title = UIComponents.__offer_title_fmt(row)
             UIComponents.offer(title, outb_chunk, inb_chunk)
 
-    @staticmethod
-    def offer_pagination(merged_df: pd.DataFrame, per_page_rows: int):
+        # --- PAGINATION ELEMENTS ---
         last_page, remainder = divmod(len(merged_df), per_page_rows)
         if remainder == 0:
             last_page -= 1
@@ -419,8 +460,7 @@ class UIComponents:
 
     # Charts
     @classmethod
-    def gantt_chart(cls, df: pd.DataFrame):
-        query_df = df.copy()
+    def gantt_chart(cls, query_df: pd.DataFrame):
         gantt = alt.Chart(query_df).mark_bar().encode(
             x=alt.X('startDate:T', title=None),
             x2=alt.X2('returnDate:T', title=None),
@@ -440,66 +480,10 @@ class UIComponents:
         st.altair_chart(gantt, use_container_width=True)
 
     @classmethod
-    def flight_count_heatmap(cls, merged_df: pd.DataFrame):
-        df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
-                "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()
-        # Keep only the date part
-        df[["departureTime_Outbound", "departureTime_Inbound"]] = df[["departureTime_Outbound", "departureTime_Inbound"]]\
-                                                                .apply(lambda x: x.dt.date)
-
-        # Group by dates and count rows
-        heatmap_data = df.groupby(['departureTime_Outbound', 'departureTime_Inbound']).size()\
-                    .reset_index(name='Number of Flights')
-
-        # --- Scaffold data ---
-        # 
-        # Add all possible combinations between the minimum departure date and the
-        # maximum return date, imputing 0 number of flights. This ensures the
-        # heatmaps plots correctely a box for every cell value
-
-        # Find the overall min and max dates
-        min_date = min(heatmap_data['departureTime_Outbound'].min(), heatmap_data['departureTime_Inbound'].min())
-        max_date = max(heatmap_data['departureTime_Outbound'].max(), heatmap_data['departureTime_Inbound'].max())
-
-        # Create a complete date range
-        full_range = pd.date_range(start=min_date, end=max_date)
-        # Generate all possible combinations of departureTime_Outbound and full_range
-        all_combinations = pd.DataFrame(
-            [(outb.date(), inb.date()) for outb in full_range for inb in full_range],
-            columns=['departureTime_Outbound', 'departureTime_Inbound']
-        )
-
-        # Merge with existing heatmap_data to retain existing values
-        heatmap_data = all_combinations.merge(
-            heatmap_data,
-            on=['departureTime_Outbound', 'departureTime_Inbound'],
-            how='left'
-        )
-        # Fill missing 'Number of Flights' with 0
-        heatmap_data.fillna({"Number of Flights": 0}, inplace=True)
-
-        # Cast dates to datetime
-        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
-            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(pd.to_datetime)
-
-        # Format dates into strings of format "%a %d %b"
-        heatmap_data[["departureTime_Outbound_fmt", "departureTime_Inbound_fmt"]] = \
-            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%a %d %b"))
-        
-        # Format dates themselves
-        heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
-            heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(lambda x: x.dt.strftime("%Y-%m-%d"))
-
-        # Renames columns
+    def flight_count_heatmap(cls, heatmap_data: pd.DataFrame):
         outb_date_colname = "Departure Date"
         inb_date_colname = "Return Date"
         number_of_flights_colname = "Number of Flights"
-        heatmap_data.rename({
-            "departureTime_Outbound": outb_date_colname,
-            "departureTime_Inbound": inb_date_colname,
-            "departureTime_Outbound_fmt": f"{outb_date_colname}_fmt",
-            "departureTime_Inbound_fmt": f"{inb_date_colname}_fmt",
-        }, axis=1, inplace=True)
 
         # Create the heatmap
         selection_point = alt.selection_point("selected_point", empty='none', fields=[outb_date_colname, inb_date_colname])
@@ -509,12 +493,14 @@ class UIComponents:
             y=alt.Y(f'{outb_date_colname}_fmt:O', title=outb_date_colname).sort(),
             color=alt.Color(f'{number_of_flights_colname}:Q').scale(**cls.color_palette),
         ).properties(
-            title="Flight Prices Heatmap"
+            title="Flight Prices Heatmap",
+            height=400
         ).add_params(selection_point)
 
         # Display the heatmap in Streamlit
         data = st.altair_chart(heatmap, on_select="rerun", use_container_width=True)
         try:
+            # TODO react to this event
             selected_point = data["selection"]["selected_point"][0]
             st.session_state["selected_heatmap_point"] = selected_point
         except Exception:
@@ -535,28 +521,14 @@ class UIComponents:
         # }
 
     @classmethod
-    def flight_duration_barchart(cls, combined_durations: pd.Series):
-        # Create bins of 2 hours (120 minutes)
-        bins = range(0, int(combined_durations.max())+120, 120)
-
-        # Calculate the count of flights in each bin
-        duration_counts = pd.cut(combined_durations, bins=bins).value_counts().sort_index()
-
-        duration_colname = 'Flight Duration'
-        count_colname = 'Count'
-        # bin_colname = 'Bin'
-        duration_df = pd.DataFrame({
-            duration_colname: [f'{interval.left //60}-{interval.right //60}h' for interval in duration_counts.index],
-            count_colname: duration_counts.values,
-            # bin_colname: duration_counts.index
-        })
-
+    def flight_duration_barchart(cls, duration_df: pd.DataFrame):
         chart = alt.Chart(duration_df).mark_bar().encode(
             x=alt.X('Flight Duration:N').sort(),
             y='Count:Q',
             color=alt.Color('Count:Q').scale(**cls.color_palette),
             tooltip=['Flight Duration', 'Count']
         ).properties(
-            title='Flight Duration vs Count'
+            title='Flight Duration Distribution',
+            height=400
         )
         st.altair_chart(chart, use_container_width=True)
