@@ -150,6 +150,7 @@ class FlightPricesChecker:
                 st.switch_page(self.__offers_pg)
 
     def offers(self):
+        # TODO mettere un bottone di reset dei filtri
         st.set_page_config(layout="wide")
 
         if st.button(label="Back", icon="⬅"):
@@ -195,6 +196,11 @@ class FlightPricesChecker:
 
             if "max_duration" not in st.session_state:
                 st.session_state["max_duration"] = st.session_state["absolute_max_duration"]
+            
+            if "selected_heatmap_point" in st.session_state:
+                selection = st.session_state["selected_heatmap_point"]["selection"]["selected_point"]
+                if selection and selection[0]["Number of Flights"] > 0:
+                    params.update({"selected_heatmap_point": selection[0]})
 
             merged_df = self.controller.filter_merged_offers(merged_df_orig, params)
             if len(merged_df) > 0:
@@ -498,13 +504,7 @@ class UIComponents:
         ).add_params(selection_point)
 
         # Display the heatmap in Streamlit
-        data = st.altair_chart(heatmap, on_select="rerun", use_container_width=True)
-        try:
-            # TODO react to this event
-            selected_point = data["selection"]["selected_point"][0]
-            st.session_state["selected_heatmap_point"] = selected_point
-        except Exception:
-            pass
+        st.altair_chart(heatmap, on_select="rerun", use_container_width=True, key="selected_heatmap_point")
         # Sample of return of a selection click
         # {
         #     "selection": {

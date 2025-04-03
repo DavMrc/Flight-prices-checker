@@ -8,6 +8,7 @@ import uuid
 import pandas as pd
 import threading
 import logging
+import datetime
 import concurrent.futures
 from typing import List
 from my_enums import TripType
@@ -276,9 +277,10 @@ class FlightsController:
 
     def filter_merged_offers(self, merged_df: pd.DataFrame, params: dict) -> pd.DataFrame:
         """
-        Filters merged offers based on `params["maxPrice"]` and `params["maxDuration"]`
+        Filters merged offers based on `params["maxPrice"]` and `params["maxDuration"]`.
+
+        If key is present, can also filter on `"selected_heatmap_point"`
         """
-        
         # By full price
         if params["maxPrice"] > 0:
             merged_df = merged_df[
@@ -290,6 +292,16 @@ class FlightsController:
             merged_df = merged_df[
                 (merged_df["totalDuration_Inbound"] <= params["maxDuration"]) &
                 (merged_df["totalDuration_Outbound"] <= params["maxDuration"])
+            ]
+        
+        # By heatmap selection point
+        if "selected_heatmap_point" in params:
+            dep_date = datetime.date.fromisoformat(params["selected_heatmap_point"]["Departure Date"])
+            ret_date = datetime.date.fromisoformat(params["selected_heatmap_point"]["Return Date"])
+
+            merged_df = merged_df[
+                (merged_df["departureTime_Outbound"].dt.date == dep_date) &
+                (merged_df["departureTime_Inbound"].dt.date == ret_date)
             ]
 
         return merged_df
