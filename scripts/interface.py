@@ -74,7 +74,7 @@ class FlightPricesChecker:
     def home(self):
         st.set_page_config(layout="centered")
         # Title of the app
-        st.title("Flight Prices Checker")
+        st.title("Flight Prices Checker", anchor=False)
 
         # Dropdown to select between "iata code" and "airport name"
         UIComponents.search_by_picker(on_change=self.__keep)
@@ -95,6 +95,9 @@ class FlightPricesChecker:
                 st.switch_page(self.__flights_pg)
 
     def flights(self):
+        # TODO aggiungere disclaimer che i dati sono stimati, non veritieri,
+        # generalmente basati su un volo di sola andata
+        # TODO aggiungere barra KPI
         st.set_page_config(layout="wide")
 
         if st.button(label="Back", icon="⬅"):
@@ -129,8 +132,11 @@ class FlightPricesChecker:
                 price_graph_df: pd.DataFrame = st.session_state["price_graph_df"]
                 query_df = self.controller.filter_price_graph(price_graph_df, params)
 
-                # Plot the chart
-                UIComponents.gantt_chart(query_df)
+                if len(query_df) > 0:
+                    # Plot the chart
+                    UIComponents.gantt_chart(query_df)
+                else:
+                    st.write("There are no offers matching the applied filters.")
 
         with col1:
             # Display selected airports
@@ -145,7 +151,9 @@ class FlightPricesChecker:
             # Initial max price
             limit_min = price_graph_df["Price"].min()
             limit_max = price_graph_df["Price"].max()
-            UIComponents.max_price_picker(limit_min_price=limit_min, limit_max_price=limit_max, on_change=self.__keep)
+            help_msg = "_Only in this page_, the maximum price shown is an **estimate** based on Google's statistics"
+            UIComponents.max_price_picker(limit_min_price=limit_min, limit_max_price=limit_max,
+                                          on_change=self.__keep, help=help_msg)
 
         #  Navigate to next page        
         _, col = st.columns([0.8, 0.2])
@@ -156,6 +164,7 @@ class FlightPricesChecker:
 
     def offers(self):
         # TODO mettere un bottone di reset dei filtri
+        # TODO aggiungere barra KPI
         st.set_page_config(layout="wide")
 
         if st.button(label="Back", icon="⬅"):

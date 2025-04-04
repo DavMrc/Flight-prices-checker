@@ -106,6 +106,11 @@ class FlightsController:
         priceChart_df.reset_index(inplace=True, drop=True)
         priceChart_df[["startDate", "returnDate"]] = priceChart_df[["startDate", "returnDate"]].apply(pd.to_datetime)
         
+        # Sometimes the API returns a price of 0, which is not valid
+        priceChart_df = priceChart_df[
+            priceChart_df["Price"] > 0
+        ]
+
         return priceChart_df
 
     def filter_price_graph(self, price_graph_df: pd.DataFrame, params: dict) -> pd.DataFrame:
