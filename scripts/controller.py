@@ -78,6 +78,7 @@ class FlightsController:
 
         return ls
 
+    # --- Price graph ---
     def get_price_graph(self, params: dict) -> pd.DataFrame:
         logging.info(f"API Request for getPriceGraph\n{params}")
         response = requests.post(
@@ -107,6 +108,15 @@ class FlightsController:
         
         return priceChart_df
 
+    def filter_price_graph(self, price_graph_df: pd.DataFrame, params: dict) -> pd.DataFrame:
+        if "maxPrice" in params and params["maxPrice"] > 0:
+            price_graph_df = price_graph_df[
+                price_graph_df["Price"] <= params["maxPrice"]
+            ]
+
+        return price_graph_df
+
+    # --- Offers ---
     def get_offers(self, reference_df: pd.DataFrame, params: dict, trip_type: TripType) -> pd.DataFrame:
         """
         Takes advantage of `futures` to invoke `_get_offer_df()` in parallel
@@ -318,6 +328,7 @@ class FlightsController:
         outb_duration_minutes = merged_df["totalDuration_Outbound"]
         return pd.concat([inb_duration_minutes, outb_duration_minutes])
 
+    # --- Charts ---
     def flight_duration_barchart(self, merged_df: pd.DataFrame) -> pd.DataFrame:
         combined_durations = self._concat_offers_duration(merged_df)
 

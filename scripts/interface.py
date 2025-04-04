@@ -105,13 +105,18 @@ class FlightPricesChecker:
 
         start_date, end_date = st.session_state["date_range"]
         min_days, max_days = st.session_state["days_range"]
+        max_price = 0
+        if "max_price" in st.session_state:
+            max_price = st.session_state["max_price"]
+
         params = {
             "departureAirport" : st.session_state["dep_airport"]["iata_code"],
             "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
             "startDate" : start_date.strftime("%Y-%m-%d"),
             "returnDate" : end_date.strftime("%Y-%m-%d"),
             "minDays" : min_days,
-            "maxDays" : max_days
+            "maxDays" : max_days,
+            "maxPrice": max_price
         }
 
         col1, col2 = st.columns([0.2, 0.8])
@@ -122,12 +127,7 @@ class FlightPricesChecker:
                     st.session_state["price_graph_df"] = price_graph_df
 
                 price_graph_df: pd.DataFrame = st.session_state["price_graph_df"]
-                query_df = price_graph_df
-
-                # Filter based on max price
-                if "_max_price" in st.session_state:
-                    max_price = st.session_state["_max_price"]
-                    query_df = price_graph_df[price_graph_df["Price"] <= max_price]
+                query_df = self.controller.filter_price_graph(price_graph_df, params)
 
                 # Plot the chart
                 UIComponents.gantt_chart(query_df)
