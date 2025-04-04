@@ -363,6 +363,7 @@ class UIComponents:
         rows = list(df.itertuples(index=False))
         nrows = len(rows)
         for i, row in enumerate(rows):
+            # TODO: sarebbe bello aggiungere il nome dell'aeroporto
             # Departure
             dep_time = row.departureTime.strftime("%H:%M")
             dep_airport = row.departureAirport
@@ -417,52 +418,70 @@ class UIComponents:
         """
         UI component that shows a vertical list of exactely `per_page_rows` `UIComponents.offer()` elements. 
         """
-        outb_df: pd.DataFrame = st.session_state["outb_df"]
-        inb_df: pd.DataFrame = st.session_state["inb_df"]
-
         if "page_no" not in st.session_state:
             st.session_state["page_no"] = 0
 
         page_no = st.session_state["page_no"]
-        start_idx = page_no * per_page_rows
-        end_idx = (1 + page_no) * per_page_rows
-
-        unique_offers = merged_df[start_idx:end_idx]
-        for row in unique_offers.itertuples():
-            outb_chunk = outb_df[row.offerID_Outbound == outb_df["offerID"]]
-            inb_chunk = inb_df[row.offerID_Inbound == inb_df["offerID"]]
-
-            # Raise error if either chunk is empty
-            error_msg = " offers chunk is empty"
-            if len(outb_chunk) == 0:
-                raise ValueError("Outbound"+ error_msg)
-            if len(inb_chunk) == 0:
-                raise ValueError("Inbound"+ error_msg)
-
-            # Format offer title
-            title = UIComponents.__offer_title_fmt(row)
-            UIComponents.offer(title, outb_chunk, inb_chunk)
-
-        # --- PAGINATION ELEMENTS ---
         last_page, remainder = divmod(len(merged_df), per_page_rows)
         if remainder == 0:
             last_page -= 1
-        last_page = max(last_page, 1)
 
-        col1s, mid, col2s = st.columns([0.2, 0.6, 0.2])
-        with col1s:
-            disabled = st.session_state["page_no"] == 0
-            if st.button("Previous", disabled=disabled):
+        if "last_page" not in st.session_state:
+            # Initialization
+            st.session_state["last_page"] = last_page
+
+        if last_page < page_no:
+            # Number of rows has decreased due to filters
+            page_no = 0
+            st.session_state["page_no"] = page_no
+
+        st.session_state["last_page"] = last_page
+
+        offers_container = st.container()
+        pagination_container = st.container()
+        # --- PAGINATION ELEMENTS ---
+        with pagination_container:
+            def increase():
+                if st.session_state["page_no"] < st.session_state["last_page"]:
+                    st.session_state["page_no"] += 1
+            
+            def decrease():
                 if st.session_state["page_no"] > 0:
                     st.session_state["page_no"] -= 1
-        with mid:
-            # TODO: fix
-            st.write(f'Page {st.session_state["page_no"]+1} / {last_page+1}')
-        with col2s:
-            disabled = st.session_state["page_no"] == last_page
-            if st.button("Next", disabled=disabled):
-                if st.session_state["page_no"] < last_page:
-                    st.session_state["page_no"] += 1
+
+            col1s, mid, col2s = st.columns([0.2, 0.6, 0.2])
+            with col1s:
+                disabled = page_no == 0
+                st.button("Previous", disabled=disabled, key="prev_button", on_click=decrease)
+            with mid:
+                st.write(f'Page {page_no+1} / {last_page+1}')
+            with col2s:
+                disabled = page_no == last_page
+                st.button("Next", disabled=disabled, key="next_button", on_click=increase)
+
+        # --- ITERATING OVER OFFERS ---
+        with offers_container:
+            outb_df: pd.DataFrame = st.session_state["outb_df"]
+            inb_df: pd.DataFrame = st.session_state["inb_df"]
+
+            start_idx = page_no * per_page_rows
+            end_idx = (1 + page_no) * per_page_rows
+
+            unique_offers = merged_df[start_idx:end_idx]
+            for row in unique_offers.itertuples():
+                outb_chunk = outb_df[row.offerID_Outbound == outb_df["offerID"]]
+                inb_chunk = inb_df[row.offerID_Inbound == inb_df["offerID"]]
+
+                # Raise error if either chunk is empty
+                error_msg = " offers chunk is empty"
+                if len(outb_chunk) == 0:
+                    raise ValueError("Outbound"+ error_msg)
+                if len(inb_chunk) == 0:
+                    raise ValueError("Inbound"+ error_msg)
+
+                # Format offer title
+                title = UIComponents.__offer_title_fmt(row)
+                UIComponents.offer(title, outb_chunk, inb_chunk)
 
     # Charts
     @classmethod
@@ -487,6 +506,7 @@ class UIComponents:
 
     @classmethod
     def flight_count_heatmap(cls, heatmap_data: pd.DataFrame):
+        # TODO assicurarsi che gli assi siano di tipo intero e mai float
         outb_date_colname = "Departure Date"
         inb_date_colname = "Return Date"
         number_of_flights_colname = "Number of Flights"
@@ -522,6 +542,7 @@ class UIComponents:
 
     @classmethod
     def flight_duration_barchart(cls, duration_df: pd.DataFrame):
+        # TODO: assicurarsi che gli assi siano di tipo intero e mai float
         chart = alt.Chart(duration_df).mark_bar().encode(
             x=alt.X('Flight Duration:N').sort(),
             y='Count:Q',
