@@ -232,9 +232,11 @@ class FlightPricesChecker:
             # Range slider for minDays and maxDays
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
-            # Initial max price
-            max_price = st.session_state["max_price"]
-            UIComponents.max_price_picker(max_price, disabled=True)
+            # Max price
+            if "absolute_max_price" not in st.session_state:
+                st.session_state["absolute_max_price"] = st.session_state["merged_df"]["fullPrice"].max()
+            max_price = st.session_state["absolute_max_price"]
+            UIComponents.max_price_picker(max_price, on_change=self.__keep)
 
             # Max duration slider
             UIComponents.max_duration_picker(on_change=self.__keep)
