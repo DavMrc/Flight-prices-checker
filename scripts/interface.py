@@ -143,7 +143,9 @@ class FlightPricesChecker:
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Initial max price
-            UIComponents.max_price_picker(price_graph_df["Price"].max(), on_change=self.__keep)
+            limit_min = price_graph_df["Price"].min()
+            limit_max = price_graph_df["Price"].max()
+            UIComponents.max_price_picker(limit_min_price=limit_min, limit_max_price=limit_max, on_change=self.__keep)
 
         #  Navigate to next page        
         _, col = st.columns([0.8, 0.2])
@@ -237,10 +239,9 @@ class FlightPricesChecker:
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Max price
-            if "absolute_max_price" not in st.session_state:
-                st.session_state["absolute_max_price"] = st.session_state["merged_df"]["fullPrice"].max()
-            max_price = st.session_state["absolute_max_price"]
-            UIComponents.max_price_picker(max_price, on_change=self.__keep)
+            min_price = merged_df_orig["fullPrice"].min()
+            max_price = merged_df_orig["fullPrice"].max()
+            UIComponents.max_price_picker(limit_min_price=min_price, limit_max_price=max_price, on_change=self.__keep)
 
             # Max duration slider
             UIComponents.max_duration_picker(on_change=self.__keep)
@@ -318,21 +319,28 @@ class UIComponents:
     def min_max_days_picker(**kwargs):
         if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
             start_date, end_date = st.session_state["date_range"]
-            min_days = 0
-            max_days = (end_date - start_date).days
-            max_days = max(max_days, 1)
 
-            st.slider("Select range of days", 0, max_days, (min_days, max_days),
-                    key="_days_range", args=["days_range"], **kwargs)
+            if "days_range" in st.session_state:
+                min_days, max_days = st.session_state["days_range"]
+                limit_max = (end_date - start_date).days
+                limit_max = max(limit_max, 1)
+            else:
+                min_days = 0
+                max_days = (end_date - start_date).days
+                max_days = max(max_days, 1)
+                limit_max = max_days
+
+        st.slider("Select range of days", 0, limit_max, (min_days, max_days),
+                key="_days_range", args=["days_range"], **kwargs)
 
     @staticmethod
-    def max_price_picker(limit_max_price:int, **kwargs):
+    def max_price_picker(limit_max_price:int, limit_min_price:int=0, **kwargs):
         if "max_price" in st.session_state:
             curr_price = st.session_state["max_price"]
         else:
             curr_price = limit_max_price
 
-        st.slider("Max Price", min_value=0, max_value=limit_max_price, value=curr_price,
+        st.slider("Max Price", min_value=limit_min_price, max_value=limit_max_price, value=curr_price,
                     key="_max_price", args=['max_price'], **kwargs)
 
     @staticmethod
