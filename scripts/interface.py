@@ -98,7 +98,10 @@ class FlightPricesChecker:
         st.set_page_config(layout="wide")
 
         if st.button(label="Back", icon="⬅"):
+            # Remove price_graph_df so that next time the user
+            # goes back to this page, the graph is reloaded
             st.session_state.pop("price_graph_df")
+            st.switch_page(self.__home_pg)
 
         start_date, end_date = st.session_state["date_range"]
         min_days, max_days = st.session_state["days_range"]
@@ -154,6 +157,7 @@ class FlightPricesChecker:
         st.set_page_config(layout="wide")
 
         if st.button(label="Back", icon="⬅"):
+            st.session_state.pop("merged_df")
             st.switch_page(self.__flights_pg)
 
         col1, col2 = st.columns([0.2, 0.8])
