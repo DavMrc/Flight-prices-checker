@@ -21,11 +21,11 @@ class FlightsController:
         self.PRJ_ROOT = self.CURR_PATH.parent.parent
 
         # GCP Cloud Function auth credential
-        credential_path = self.PRJ_ROOT / "data/cloud_functions.json"
+        credential_path = self.PRJ_ROOT / "data/auth_files/cloud_functions.json"
         os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path.resolve().as_posix()
 
         # GCP Cloud Function endpoints
-        self.endpoints: dict = json.load(open(self.PRJ_ROOT / "data/endpoints.json", "r"))
+        self.endpoints: dict = json.load(open(self.PRJ_ROOT / "data/auth_files/endpoints.json", "r"))
 
         # Load the airports data
         self.airports = pd.read_csv(self.PRJ_ROOT / "data/airports.csv")

@@ -1,6 +1,7 @@
 .ipynb_checkpoints
 .vscode
-data/
+data/auth_files/
+data/samples/
 venv/
 
 scripts/local_golang_interpreter/
