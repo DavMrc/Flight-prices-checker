@@ -532,18 +532,28 @@ class UIComponents:
 
     @classmethod
     def flight_count_heatmap(cls, heatmap_data: pd.DataFrame):
-        # TODO: aggiungere il numero di giorni tra partenza e arrivo
         outb_date_colname = "Departure Date"
         inb_date_colname = "Return Date"
+        outb_date_colname_fmt = "Departure Date_fmt"
+        inb_date_colname_fmt = "Return Date_fmt"
         number_of_flights_colname = "Number of Flights"
+        days_colname = "Days"
 
         # Create the heatmap
-        selection_point = alt.selection_point("selected_point", empty='none', fields=[outb_date_colname, inb_date_colname])
+        selection_point = alt.selection_point("selected_point", empty='none',
+                                              fields=[outb_date_colname, inb_date_colname, number_of_flights_colname])
 
         heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-            x=alt.X(f'{inb_date_colname}_fmt:O', title=inb_date_colname).sort(),
-            y=alt.Y(f'{outb_date_colname}_fmt:O', title=outb_date_colname).sort(),
+            x=alt.X(f'{inb_date_colname_fmt}:O', title=inb_date_colname).sort(),
+            y=alt.Y(f'{outb_date_colname_fmt}:O', title=outb_date_colname).sort(),
             color=alt.Color(f'{number_of_flights_colname}:Q').scale(**cls.color_palette),
+            tooltip=[
+                # order of the fields matters!
+                {"field": outb_date_colname_fmt, "title": outb_date_colname},
+                {"field": inb_date_colname_fmt, "title": inb_date_colname},
+                {"field": number_of_flights_colname, "title": number_of_flights_colname},
+                {"field": days_colname, "title": days_colname}
+            ]
         ).properties(
             title="Flight Prices Heatmap",
             height=400

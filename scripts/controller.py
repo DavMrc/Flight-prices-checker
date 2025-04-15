@@ -404,6 +404,11 @@ class FlightsController:
         # Cast dates to datetime
         heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]] = \
             heatmap_data[["departureTime_Outbound", "departureTime_Inbound"]].apply(pd.to_datetime)
+        
+        # Calculate the difference in days between departure and return dates
+        heatmap_data["Days"] = (
+            heatmap_data["departureTime_Inbound"] - heatmap_data["departureTime_Outbound"]
+        ).dt.days + 1
 
         # Format dates into strings of format "%a %d %b"
         heatmap_data[["departureTime_Outbound_fmt", "departureTime_Inbound_fmt"]] = \
