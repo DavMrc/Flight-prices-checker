@@ -83,7 +83,7 @@ class FlightsController:
         logging.info(f"API Request for getPriceGraph\n{params}")
         response = requests.post(
             url=self.endpoints["getPriceGraph"],
-            data=params,
+            json=params,
             headers={
                 "Authorization": self.auth_tokens["getPriceGraph"]
             }
@@ -105,11 +105,6 @@ class FlightsController:
         priceChart_df.sort_values(["startDate", "returnDate"], inplace=True)
         priceChart_df.reset_index(inplace=True, drop=True)
         priceChart_df[["startDate", "returnDate"]] = priceChart_df[["startDate", "returnDate"]].apply(pd.to_datetime)
-        
-        # Sometimes the API returns a price of 0, which is not valid
-        priceChart_df = priceChart_df[
-            priceChart_df["Price"] > 0
-        ]
 
         return priceChart_df
 
@@ -127,7 +122,6 @@ class FlightsController:
         Takes advantage of `futures` to invoke `_get_offer_df()` in parallel
         """
         logging.info(f"API Request for {trip_type} getOffers\n{params}")
-        getOffersToken = self.auth_tokens["getOffers"]
 
         # Setting parameters and columns
         departureAirport = None
@@ -161,7 +155,7 @@ class FlightsController:
                     "destinationAirport": destinationAirport,
                     "tripType": "oneway"
                 }
-                future = executor.submit(self._get_offer_df, request_data, getOffersToken)
+                future = executor.submit(self._get_offer_df, request_data)
                 futures.append(future)
             
             for future in concurrent.futures.as_completed(futures):
@@ -174,8 +168,10 @@ class FlightsController:
         df.drop_duplicates(['chainID', 'startDate', 'returnDate', 'price',
                             'departureAirport','arrivalAirport','departureTime','arrivalTime']
                             , inplace=True, ignore_index=True)
-        df[["startDate", "returnDate", "departureTime", "arrivalTime"]] = \
-            df[["startDate", "returnDate", "departureTime", "arrivalTime"]].apply(pd.to_datetime)
+        df[["startDate", "returnDate"]] = df[["startDate", "returnDate"]].apply(pd.to_datetime)
+        df[["departureTime", "arrivalTime"]] = df[["departureTime", "arrivalTime"]].apply(
+            lambda x: pd.to_datetime(x, format="%Y-%m-%dT%H:%M:%S%z")
+        )
         
         df["flightDuration"] = (df["arrivalTime"] - df["departureTime"]).dt.total_seconds() // 60
         # Preliminary filter: if the price of even a single one-way route
@@ -185,7 +181,7 @@ class FlightsController:
 
         return df
 
-    def _get_offer_df(self, request_data:dict, getOffersToken:str) -> pd.DataFrame :
+    def _get_offer_df(self, request_data:dict) -> pd.DataFrame :
         """
         Perform a POST request towards GCP Cloud functions and retrieve a
         `pandas.DataFrame` containing flight offers
@@ -197,9 +193,9 @@ class FlightsController:
         response = requests.post(
             url=self.endpoints["getOffers"],
             headers={
-                "Authorization": getOffersToken
+                "Authorization": self.auth_tokens["getOffers"]
             },
-            data=request_data
+            json=request_data
         )
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.content.decode('utf-8')}")
@@ -218,8 +214,21 @@ class FlightsController:
             for ix, f in enumerate(flights_list):
                 dep_airport = f['DepAirportCode']
                 arr_airport = f['ArrAirportCode']
-                dep_time = f['DepTime'][:16]
-                arr_time = f['ArrTime'][:16]
+                dep_time = f['DepTime']
+                arr_time = f['ArrTime']
+
+                # Offer URL
+                offer_url_response = requests.post(
+                    url=self.endpoints["getUrl"],
+                    headers={
+                        "Authorization": self.auth_tokens["getUrl"]
+                    },
+                    json=request_data
+                )
+                if response.status_code != 200:
+                    raise Exception(f"Error {response.status_code}: {response.content.decode('utf-8')}")
+                
+                url = json.loads(offer_url_response.content)["url"]
 
                 flights.append({
                     "offerID": offer_id,
@@ -230,7 +239,8 @@ class FlightsController:
                     "departureAirport": dep_airport,
                     "arrivalAirport": arr_airport,
                     "departureTime": dep_time,
-                    "arrivalTime": arr_time
+                    "arrivalTime": arr_time,
+                    "url": url
                 })
         
         return pd.DataFrame(flights)

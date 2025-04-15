@@ -12,18 +12,18 @@ Documentation automatically generated from [`scripts/generate_dataframe_schemas.
 | 4 | price | int64 |
 | 5 | departureAirport | object |
 | 6 | arrivalAirport | object |
-| 7 | departureTime | datetime64[ns] |
-| 8 | arrivalTime | datetime64[ns] |
-| 9 | flightDuration | float64 |
+| 7 | departureTime | datetime64[ns, |
+| 8 | arrivalTime | datetime64[ns, |
+| 9 | url | object |
+| 10 | flightDuration | float64 |
 
 #### Sample Data
-|    | offerID                              |   chainID | startDate           | returnDate          |   price | departureAirport   | arrivalAirport   | departureTime       | arrivalTime         |   flightDuration |
-|---:|:-------------------------------------|----------:|:--------------------|:--------------------|--------:|:-------------------|:-----------------|:--------------------|:--------------------|-----------------:|
-|  0 | cf39a95f-525b-46c4-822e-02f545ad4967 |         0 | 2025-04-12 00:00:00 | 2025-04-19 00:00:00 |      76 | FNC                | MXP              | 2025-04-12 14:50:00 | 2025-04-12 19:30:00 |              280 |
-|  1 | 10aa65be-a1ae-4878-b04e-e22c530fd3a1 |         0 | 2025-04-12 00:00:00 | 2025-04-19 00:00:00 |     111 | FNC                | LIS              | 2025-04-12 04:05:00 | 2025-04-12 05:50:00 |              105 |
-|  2 | 10aa65be-a1ae-4878-b04e-e22c530fd3a1 |         1 | 2025-04-12 00:00:00 | 2025-04-19 00:00:00 |     111 | LIS                | MXP              | 2025-04-12 07:15:00 | 2025-04-12 11:00:00 |              225 |
-|  3 | 680dd969-7d79-4aea-9026-d88b342123a3 |         0 | 2025-04-12 00:00:00 | 2025-04-19 00:00:00 |     163 | FNC                | LIS              | 2025-04-12 12:35:00 | 2025-04-12 14:20:00 |              105 |
-|  4 | 680dd969-7d79-4aea-9026-d88b342123a3 |         1 | 2025-04-12 00:00:00 | 2025-04-19 00:00:00 |     163 | LIS                | MXP              | 2025-04-12 15:30:00 | 2025-04-12 19:15:00 |              225 |
+|    | offerID                              |   chainID | startDate           | returnDate          |   price | departureAirport   | arrivalAirport   | departureTime             | arrivalTime               | url                                                                                                                       |   flightDuration |
+|---:|:-------------------------------------|----------:|:--------------------|:--------------------|--------:|:-------------------|:-----------------|:--------------------------|:--------------------------|:--------------------------------------------------------------------------------------------------------------------------|-----------------:|
+|  0 | b1e9f451-efce-4780-ae88-a04f7a896c49 |         0 | 2025-05-06 00:00:00 | 2025-05-13 00:00:00 |     168 | FNC                | MXP              | 2025-05-06 14:45:00+01:00 | 2025-05-06 19:25:00+02:00 | https://www.google.com/travel/flights/search?tfs=GiASCjIwMjUtMDUtMDYoAGoHCAESA0ZOQ3IHCAESA01YUEIBAUgBmAEC&curr=EUR&hl=und |              220 |
+|  1 | 1f7cd563-de8a-4499-9688-eb1629d0a34a |         0 | 2025-04-26 00:00:00 | 2025-05-03 00:00:00 |     144 | FNC                | MXP              | 2025-04-26 14:50:00+01:00 | 2025-04-26 19:30:00+02:00 | https://www.google.com/travel/flights/search?tfs=GiASCjIwMjUtMDQtMjYoAGoHCAESA0ZOQ3IHCAESA01YUEIBAUgBmAEC&curr=EUR&hl=und |              220 |
+|  2 | 5ac1428e-deb5-492f-a297-df9304fda1f2 |         0 | 2025-05-03 00:00:00 | 2025-05-10 00:00:00 |     182 | FNC                | MXP              | 2025-05-03 14:50:00+01:00 | 2025-05-03 19:30:00+02:00 | https://www.google.com/travel/flights/search?tfs=GiASCjIwMjUtMDUtMDMoAGoHCAESA0ZOQ3IHCAESA01YUEIBAUgBmAEC&curr=EUR&hl=und |              220 |
+|  3 | 74c1ddf9-e05e-4daf-af63-d81907425e42 |         0 | 2025-04-29 00:00:00 | 2025-05-06 00:00:00 |     182 | FNC                | MXP              | 2025-04-29 14:45:00+01:00 | 2025-04-29 19:25:00+02:00 | https://www.google.com/travel/flights/search?tfs=GiASCjIwMjUtMDQtMjkoAGoHCAESA0ZOQ3IHCAESA01YUEIBAUgBmAEC&curr=EUR&hl=und |              220 |
 
 ---
 
@@ -33,25 +33,25 @@ Documentation automatically generated from [`scripts/generate_dataframe_schemas.
 | 0 | offerID_Outbound | object |
 | 1 | departureAirport_Outbound | object |
 | 2 | arrivalAirport_Outbound | object |
-| 3 | departureTime_Outbound | datetime64[ns] |
-| 4 | arrivalTime_Outbound | datetime64[ns] |
+| 3 | departureTime_Outbound | datetime64[ns, |
+| 4 | arrivalTime_Outbound | datetime64[ns, |
 | 5 | totalDuration_Outbound | float64 |
 | 6 | offerID_Inbound | object |
 | 7 | departureAirport_Inbound | object |
 | 8 | arrivalAirport_Inbound | object |
-| 9 | departureTime_Inbound | datetime64[ns] |
-| 10 | arrivalTime_Inbound | datetime64[ns] |
+| 9 | departureTime_Inbound | datetime64[ns, |
+| 10 | arrivalTime_Inbound | datetime64[ns, |
 | 11 | totalDuration_Inbound | float64 |
 | 12 | fullPrice | int64 |
 
 #### Sample Data
-|    | offerID_Outbound                     | departureAirport_Outbound   | arrivalAirport_Outbound   | departureTime_Outbound   | arrivalTime_Outbound   |   totalDuration_Outbound | offerID_Inbound                      | departureAirport_Inbound   | arrivalAirport_Inbound   | departureTime_Inbound   | arrivalTime_Inbound   |   totalDuration_Inbound |   fullPrice |
-|---:|:-------------------------------------|:----------------------------|:--------------------------|:-------------------------|:-----------------------|-------------------------:|:-------------------------------------|:---------------------------|:-------------------------|:------------------------|:----------------------|------------------------:|------------:|
-|  0 | 00032d29-07c7-4ca7-ae7f-af7e8fc68725 | ['MXP', 'DUS']              | ['DUS', 'FNC']            | 2025-04-09 18:50:00      | 2025-04-10 09:30:00    |                      880 | 0a53de7d-c7b3-4a78-85c1-a73c40f94865 | ['FNC', 'LIS']             | ['LIS', 'MXP']           | 2025-04-15 06:25:00     | 2025-04-15 16:25:00   |                     600 |         304 |
-|  1 | 00032d29-07c7-4ca7-ae7f-af7e8fc68725 | ['MXP', 'DUS']              | ['DUS', 'FNC']            | 2025-04-09 18:50:00      | 2025-04-10 09:30:00    |                      880 | 18358ac5-cb87-4b42-935b-30d44220d3c5 | ['FNC', 'LIS']             | ['LIS', 'MXP']           | 2025-04-15 17:40:00     | 2025-04-16 00:45:00   |                     425 |         339 |
-|  2 | 00032d29-07c7-4ca7-ae7f-af7e8fc68725 | ['MXP', 'DUS']              | ['DUS', 'FNC']            | 2025-04-09 18:50:00      | 2025-04-10 09:30:00    |                      880 | 3a4e93bd-ed47-482a-bc17-01674eecd19e | ['FNC', 'OPO']             | ['OPO', 'MXP']           | 2025-04-15 14:35:00     | 2025-04-15 21:00:00   |                     385 |         312 |
-|  3 | 00032d29-07c7-4ca7-ae7f-af7e8fc68725 | ['MXP', 'DUS']              | ['DUS', 'FNC']            | 2025-04-09 18:50:00      | 2025-04-10 09:30:00    |                      880 | 3dc2c355-2181-4239-855f-a95fd3b1de73 | ['FNC', 'PRG']             | ['PRG', 'MXP']           | 2025-04-15 15:15:00     | 2025-04-15 23:05:00   |                     470 |         337 |
-|  4 | 00032d29-07c7-4ca7-ae7f-af7e8fc68725 | ['MXP', 'DUS']              | ['DUS', 'FNC']            | 2025-04-09 18:50:00      | 2025-04-10 09:30:00    |                      880 | 52a03d07-9a51-47a1-8c10-632a3720beee | ['FNC', 'LIS']             | ['LIS', 'MXP']           | 2025-04-15 09:30:00     | 2025-04-15 17:30:00   |                     480 |         316 |
+|    | offerID_Outbound                     | departureAirport_Outbound   | arrivalAirport_Outbound   | departureTime_Outbound    | arrivalTime_Outbound      |   totalDuration_Outbound | offerID_Inbound                      | departureAirport_Inbound   | arrivalAirport_Inbound   | departureTime_Inbound     | arrivalTime_Inbound       |   totalDuration_Inbound |   fullPrice |
+|---:|:-------------------------------------|:----------------------------|:--------------------------|:--------------------------|:--------------------------|-------------------------:|:-------------------------------------|:---------------------------|:-------------------------|:--------------------------|:--------------------------|------------------------:|------------:|
+|  0 | 49b466d2-1a58-4030-bcf6-2618c560a3dd | ['MXP']                     | ['FNC']                   | 2025-04-22 20:00:00+02:00 | 2025-04-22 23:10:00+01:00 |                      250 | 74c1ddf9-e05e-4daf-af63-d81907425e42 | ['FNC']                    | ['MXP']                  | 2025-04-29 14:45:00+01:00 | 2025-04-29 19:25:00+02:00 |                     220 |         333 |
+|  1 | 643ee684-a2d6-4ef1-8735-1e96dacc33c7 | ['MXP']                     | ['FNC']                   | 2025-04-22 20:00:00+02:00 | 2025-04-22 23:10:00+01:00 |                      250 | 1f7cd563-de8a-4499-9688-eb1629d0a34a | ['FNC']                    | ['MXP']                  | 2025-04-26 14:50:00+01:00 | 2025-04-26 19:30:00+02:00 |                     220 |         295 |
+|  2 | 83385f50-a119-4175-bb5f-f1473e8681e7 | ['MXP']                     | ['FNC']                   | 2025-04-29 20:00:00+02:00 | 2025-04-29 23:10:00+01:00 |                      250 | 5ac1428e-deb5-492f-a297-df9304fda1f2 | ['FNC']                    | ['MXP']                  | 2025-05-03 14:50:00+01:00 | 2025-05-03 19:30:00+02:00 |                     220 |         287 |
+|  3 | d650ebc2-d2a8-42cc-b8d9-6f1019b6c283 | ['MXP']                     | ['FNC']                   | 2025-04-26 19:55:00+02:00 | 2025-04-26 23:05:00+01:00 |                      250 | 5ac1428e-deb5-492f-a297-df9304fda1f2 | ['FNC']                    | ['MXP']                  | 2025-05-03 14:50:00+01:00 | 2025-05-03 19:30:00+02:00 |                     220 |         426 |
+|  4 | f0b11b1b-5378-4713-8be2-eda942069e6e | ['MXP']                     | ['FNC']                   | 2025-04-29 20:00:00+02:00 | 2025-04-29 23:10:00+01:00 |                      250 | b1e9f451-efce-4780-ae88-a04f7a896c49 | ['FNC']                    | ['MXP']                  | 2025-05-06 14:45:00+01:00 | 2025-05-06 19:25:00+02:00 |                     220 |         273 |
 
 ---
 

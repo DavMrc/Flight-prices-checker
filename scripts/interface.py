@@ -95,8 +95,6 @@ class FlightPricesChecker:
                 st.switch_page(self.__flights_pg)
 
     def flights(self):
-        # TODO aggiungere disclaimer che i dati sono stimati, non veritieri,
-        # generalmente basati su un volo di sola andata
         # TODO aggiungere barra KPI
         st.set_page_config(layout="wide")
 
@@ -309,6 +307,7 @@ class UIComponents:
             st.session_state["date_range"] = (range_min_date, range_max_date)
 
         range_min_date, range_max_date = st.session_state["date_range"]
+        # TODO: l'utente può fare brute-force insert di una data, facendo fallire il widget
         selected_dates = st.date_input("Select Date Range", value=(range_min_date, range_max_date),
                                         min_value=datetime.date.today(), **kwargs)
 
@@ -348,12 +347,14 @@ class UIComponents:
             curr_price = st.session_state["max_price"]
         else:
             curr_price = limit_max_price
+            st.session_state["max_price"] = limit_max_price
 
         st.slider("Max Price", min_value=limit_min_price, max_value=limit_max_price, value=curr_price,
                     key="_max_price", args=['max_price'], **kwargs)
 
     @staticmethod
     def max_duration_picker(**kwargs):
+        # TODO: formattare in ore intere, mai 4.2 ore
         max_val = st.session_state["absolute_max_duration"] / 60
         st.slider("Max duration", value=max_val, min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
                     key="_max_duration", args=["max_duration"], **kwargs)
@@ -418,6 +419,8 @@ class UIComponents:
             except IndexError:
                 # flight combination has no (or no-more) layovers
                 pass
+
+        st.link_button("", url=row.url, icon=":material/travel:", help="Open in Google Flights")
 
     @staticmethod
     def __card_title_fmt(df: pd.DataFrame):
@@ -529,7 +532,7 @@ class UIComponents:
 
     @classmethod
     def flight_count_heatmap(cls, heatmap_data: pd.DataFrame):
-        # TODO assicurarsi che gli assi siano di tipo intero e mai float
+        # TODO: aggiungere il numero di giorni tra partenza e arrivo
         outb_date_colname = "Departure Date"
         inb_date_colname = "Return Date"
         number_of_flights_colname = "Number of Flights"
@@ -565,7 +568,6 @@ class UIComponents:
 
     @classmethod
     def flight_duration_barchart(cls, duration_df: pd.DataFrame):
-        # TODO: assicurarsi che gli assi siano di tipo intero e mai float
         chart = alt.Chart(duration_df).mark_bar().encode(
             x=alt.X('Flight Duration:N').sort(),
             y='Count:Q',
