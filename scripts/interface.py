@@ -525,7 +525,12 @@ class UIComponents:
             x2=alt.X2('returnDate:T', title=None),
             y=alt.Y('row_number:O', title=None, axis=None),
             color=alt.Color('Price:Q').scale(**cls.color_palette),
-            tooltip=['startDate:T', 'returnDate:T', alt.Tooltip('Price:Q', title='Price (€)')]
+            tooltip=[
+                alt.Tooltip('startDate:T', title="Departure Date"),
+                alt.Tooltip('returnDate:T', title="Return Date"),
+                alt.Tooltip('Days:Q', title="Vacation Days"),
+                alt.Tooltip('Price:Q', title='Est. price (€)')
+            ]
         ).transform_window(
             row_number='row_number()'
         ).properties(

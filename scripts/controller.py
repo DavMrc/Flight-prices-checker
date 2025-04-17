@@ -105,6 +105,7 @@ class FlightsController:
         priceChart_df.sort_values(["startDate", "returnDate"], inplace=True)
         priceChart_df.reset_index(inplace=True, drop=True)
         priceChart_df[["startDate", "returnDate"]] = priceChart_df[["startDate", "returnDate"]].apply(pd.to_datetime)
+        priceChart_df["Days"] = (priceChart_df["returnDate"] - priceChart_df["startDate"]).dt.days
         priceChart_df.drop_duplicates(inplace=True)
 
         return priceChart_df
