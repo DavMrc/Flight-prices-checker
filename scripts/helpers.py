@@ -8,3 +8,8 @@ def fmt_duration(duration: datetime.timedelta) -> str:
     hours, remainder = divmod(duration.total_seconds(), 60*60)
     minutes = remainder // 60
     return f"{int(hours):02} hrs {int(minutes):02} min"
+
+
+def gantt_chart_height_proportion(df) -> int:
+    """80 + `len(df)` * 18"""
+    return 80 + len(df) * 18

@@ -5,7 +5,7 @@ import datetime
 import logging
 from my_enums import TripType
 from controller import FlightsController
-from helpers import fmt_duration
+from helpers import fmt_duration, gantt_chart_height_proportion
 
 
 class FlightPricesChecker:
@@ -132,7 +132,14 @@ class FlightPricesChecker:
 
                 if len(query_df) > 0:
                     # Plot the chart
-                    UIComponents.gantt_chart(query_df)
+                    height = gantt_chart_height_proportion(query_df) + 40
+                    if height > 800:
+                        height = 800
+                    if height < 200:
+                        height = 200
+
+                    with st.container(height=height):
+                        UIComponents.gantt_chart(query_df)
                 else:
                     st.write("There are no offers matching the applied filters.")
 
@@ -147,8 +154,8 @@ class FlightPricesChecker:
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Initial max price
-            limit_min = price_graph_df["Price"].min()
-            limit_max = price_graph_df["Price"].max()
+            limit_min = int(price_graph_df["Price"].min())
+            limit_max = int(price_graph_df["Price"].max())
             help_msg = "_Only in this page_, the maximum price shown is an **estimate** based on Google's statistics"
             UIComponents.max_price_picker(limit_min_price=limit_min, limit_max_price=limit_max,
                                           on_change=self.__keep, help=help_msg)
@@ -512,6 +519,7 @@ class UIComponents:
     # Charts
     @classmethod
     def gantt_chart(cls, query_df: pd.DataFrame):
+        height = gantt_chart_height_proportion(query_df)
         gantt = alt.Chart(query_df).mark_bar().encode(
             x=alt.X('startDate:T', title=None),
             x2=alt.X2('returnDate:T', title=None),
@@ -521,8 +529,7 @@ class UIComponents:
         ).transform_window(
             row_number='row_number()'
         ).properties(
-            width=800,
-            height=400
+            height=height
         ).configure_axisX(
             tickCount="day",
             labelAngle=-90
