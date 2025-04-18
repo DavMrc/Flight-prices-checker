@@ -355,13 +355,15 @@ class UIComponents:
         else:
             curr_price = limit_max_price
             st.session_state["max_price"] = limit_max_price
+        
+        if limit_min_price == limit_max_price:
+            limit_min_price = limit_max_price - 1
 
         st.slider("Max Price", min_value=limit_min_price, max_value=limit_max_price, value=curr_price,
                     key="_max_price", args=['max_price'], **kwargs)
 
     @staticmethod
     def max_duration_picker(**kwargs):
-        # TODO: formattare in ore intere, mai 4.2 ore
         max_val = st.session_state["absolute_max_duration"] / 60
         st.slider("Max duration", value=max_val, min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
                     key="_max_duration", args=["max_duration"], **kwargs)
@@ -540,6 +542,13 @@ class UIComponents:
             labelAngle=-90
         )
 
+        # Hide options to download chart
+        gantt["usermeta"] = {
+            "embedOptions": {
+                "actions": False,
+            }
+        }
+
         st.altair_chart(gantt, use_container_width=True)
 
     @classmethod
@@ -571,6 +580,13 @@ class UIComponents:
             height=400
         ).add_params(selection_point)
 
+        # Hide options to download chart
+        heatmap["usermeta"] = {
+            "embedOptions": {
+                "actions": False,
+            }
+        }
+
         # Display the heatmap in Streamlit
         st.altair_chart(heatmap, on_select="rerun", use_container_width=True, key="selected_heatmap_point")
         # Sample of return of a selection click
@@ -599,4 +615,12 @@ class UIComponents:
             title='Flight Duration Distribution',
             height=400
         )
+
+        # Hide options to download chart
+        chart["usermeta"] = {
+            "embedOptions": {
+                "actions": False,
+            }
+        }
+
         st.altair_chart(chart, use_container_width=True)
