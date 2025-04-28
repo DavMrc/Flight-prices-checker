@@ -28,9 +28,14 @@ class FlightsController:
 
         # Load the airports data
         self.airports = pd.read_csv(PRJ_ROOT / "data/airports.csv")
+        # Filter
+        airport_types = ["small_airport", "medium_airport", "large_airport"]
         self.airports = self.airports[["iata_code", "name"]]
         self.airports = self.airports[self.airports["iata_code"].notna()
-                                    & (self.airports["iata_code"] != "")]
+                                    & (self.airports["iata_code"] != "")
+                                    & self.airports["type"].isin(airport_types)]
+
+        self.airports.sort_values("iata_code", inplace=True)
         self.airports.reset_index(drop=True, inplace=True)
 
         # Dictionary to store the authorization tokens
