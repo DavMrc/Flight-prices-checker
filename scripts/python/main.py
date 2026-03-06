@@ -1,12 +1,12 @@
 import logging
 import os
 import traceback
-import pathlib
 import streamlit as st
 import pandas as pd
 import altair as alt
+from helpers import get_project_root
 from interface import FlightPricesChecker
-from controller import FlightsController, DatabaseController
+from controller import FlightsController
 
 
 logging.basicConfig(
@@ -21,14 +21,12 @@ if __name__ == "__main__":
     alt.theme.enable("powerbi")
 
     # Set GCP auth credential
-    CURR_PATH = pathlib.Path(__file__)
-    PRJ_ROOT = CURR_PATH.parent.parent
+    PRJ_ROOT = get_project_root()
     credential_path = PRJ_ROOT / "data/auth_files/cloud_functions.json"
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path.resolve().as_posix()
 
     if "controller" not in st.session_state:
         controller = FlightsController()
-        controller.authenticate_endpoints_with_threads()
         st.session_state["controller"] = controller
     
     if "interface" not in st.session_state:
@@ -39,10 +37,6 @@ if __name__ == "__main__":
         app.run()
     except Exception as e:
         st.error("An error occurred while running the app.")
-        logging.error(f"An error occurred: {e}")
-        l = traceback.format_exception(e)
-        stack_trace = "".join(l)
-
-        db_controller = DatabaseController()
-        session_dump = db_controller.dump_session_state()
-        db_controller.insert_error(str(e), stack_trace, session_dump)
+        t = traceback.format_exception(e)
+        stack_trace = "".join(t)
+        logging.error(f"An error occurred:\n{stack_trace}")

@@ -1,4 +1,5 @@
 import datetime
+import pathlib
 
 
 def fmt_duration(duration: datetime.timedelta) -> str:
@@ -13,3 +14,10 @@ def fmt_duration(duration: datetime.timedelta) -> str:
 def gantt_chart_height_proportion(df) -> int:
     """80 + `len(df)` * 18"""
     return 80 + len(df) * 18
+
+
+def get_project_root() -> pathlib.Path:
+    """Returns the project root directory as a `pathlib.Path` object."""
+    CURR_PATH = pathlib.Path(__file__)
+    PRJ_ROOT = CURR_PATH.parent.parent
+    return PRJ_ROOT

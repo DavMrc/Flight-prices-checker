@@ -1,0 +1,23 @@
+# ── Build stage ────────────────────────────────────────────────────────────────
+FROM golang:1.21-alpine AS builder
+
+# git is required by go mod download for non-zip VCS dependencies
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+# Copy go.mod and all sources first so go mod tidy can resolve imports
+COPY ./scripts/go/go.mod ./
+COPY ./scripts/go/*.go ./
+
+# tidy generates go.sum and downloads all required packages, then build
+RUN go mod tidy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /flights-api .
+
+# ── Final stage ────────────────────────────────────────────────────────────────
+FROM gcr.io/distroless/static-debian12
+
+COPY --from=builder /flights-api /flights-api
+
+EXPOSE 8080
+
+ENTRYPOINT ["/flights-api"]

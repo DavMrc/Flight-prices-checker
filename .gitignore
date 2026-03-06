@@ -1,11 +1,10 @@
 .ipynb_checkpoints
 .vscode
-data/auth_files/
-data/samples/
+
+# Python
+__pycache__/
 venv/
 
-scripts/local_golang_interpreter/
-scripts/__pycache__/
-scripts/testing*
-
-notebooks/tests/
+# Testing
+data/samples/
+tests/

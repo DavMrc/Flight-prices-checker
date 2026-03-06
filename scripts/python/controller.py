@@ -1,22 +1,17 @@
-import pathlib
+import os
 import requests
-import google.auth.transport.requests
-import google.oauth2.id_token
 import json
 import uuid
-import threading
 import logging
 import datetime
 import concurrent.futures
 import pandas as pd
-import streamlit as st
-from google.cloud import bigquery
+from helpers import get_project_root
 from typing import List
 from my_enums import TripType
 
 
-CURR_PATH = pathlib.Path(__file__)
-PRJ_ROOT = CURR_PATH.parent.parent
+PRJ_ROOT = get_project_root()
 
 
 class FlightsController:
@@ -24,42 +19,24 @@ class FlightsController:
         logging.info("Initializing FlightsController...")
 
         # GCP Cloud Function endpoints
-        self.endpoints: dict = json.load(open(PRJ_ROOT / "data/auth_files/endpoints.json", "r"))
+        base_url = os.environ.get("API_BASE_URL", "http://localhost:8080")
+        self.endpoints = {
+            "getOffers": f"{base_url}/getOffers",
+            "getPriceGraph": f"{base_url}/getPriceGraph",
+            "getUrl": f"{base_url}/getUrl"
+        }
 
         # Load the airports data
         self.airports = pd.read_csv(PRJ_ROOT / "data/airports.csv")
         # Filter
         airport_types = ["small_airport", "medium_airport", "large_airport"]
-        self.airports = self.airports[["iata_code", "name"]]
         self.airports = self.airports[self.airports["iata_code"].notna()
                                     & (self.airports["iata_code"] != "")
                                     & self.airports["type"].isin(airport_types)]
+        self.airports = self.airports[["iata_code", "name"]]
 
         self.airports.sort_values("iata_code", inplace=True)
         self.airports.reset_index(drop=True, inplace=True)
-
-        # Dictionary to store the authorization tokens
-        self.auth_tokens = {}
-
-    def authenticate_endpoints_with_threads(self):
-        threads = []
-        for endpoint, url in self.endpoints.items():
-            thread = threading.Thread(target=self.__auth_to_gcp, args=(endpoint, url), name=endpoint)
-            threads.append(thread)
-            thread.start()
-            logging.info(f"Authenticating to {thread.name}...")
-        
-        for thread in threads:
-            thread.join()
-            logging.info(f"Successfully authenticated to {thread.name}")
-
-    def __auth_to_gcp(self, endpoint: str, function_url: str):
-        """
-        Authenticates to the provided GCP Cloud Function
-        """
-        auth_req = google.auth.transport.requests.Request()
-        id_token = google.oauth2.id_token.fetch_id_token(auth_req, function_url)
-        self.auth_tokens[endpoint] = "Bearer " + id_token
 
     def get_airports_json(self) -> List[dict]:
         """
@@ -87,18 +64,17 @@ class FlightsController:
         logging.info(f"API Request for getPriceGraph\n{params}")
         response = requests.post(
             url=self.endpoints["getPriceGraph"],
-            json=params,
-            headers={
-                "Authorization": self.auth_tokens["getPriceGraph"]
-            }
+            json=params
         )
 
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code}: {response.content.decode('utf-8')}")
 
         data = json.loads(response.content)
-        priceChart_df = pd.json_normalize(data)
+        if not data:
+            return pd.DataFrame(columns=["startDate", "returnDate", "Price", "Days"])
 
+        priceChart_df = pd.json_normalize(data)
         priceChart_df["StartDate"] = priceChart_df["StartDate"].str[:10]
         priceChart_df["ReturnDate"] = priceChart_df["ReturnDate"].str[:10]
         priceChart_df.rename({
@@ -198,9 +174,6 @@ class FlightsController:
         """
         response = requests.post(
             url=self.endpoints["getOffers"],
-            headers={
-                "Authorization": self.auth_tokens["getOffers"]
-            },
             json=request_data
         )
         if response.status_code != 200:
@@ -226,9 +199,6 @@ class FlightsController:
                 # Offer URL
                 offer_url_response = requests.post(
                     url=self.endpoints["getUrl"],
-                    headers={
-                        "Authorization": self.auth_tokens["getUrl"]
-                    },
                     json=request_data
                 )
                 if response.status_code != 200:
@@ -435,80 +405,3 @@ class FlightsController:
         }, axis=1, inplace=True)
 
         return heatmap_data
-
-
-class DatabaseController:
-    def __init__(self):
-        self.__client = bigquery.Client()
-
-    def dump_session_state(self) -> str:
-        retained_data = {}
-        for k, v in st.session_state.to_dict().items():
-            if k.startswith("_"):
-                continue
-
-            if isinstance(v, pd.DataFrame):
-                j = json.loads(v.to_json(orient="records"))
-                retained_data.update({k: j})
-            else:
-                retained_data.update({k: v})
-
-        return json.dumps(retained_data, default=str, sort_keys=True)
-
-    def insert_error(self, error_msg: str, stack_trace:str, session_state: str) -> None:
-        if not isinstance(error_msg, str) or \
-           not isinstance(stack_trace, str) or \
-           not isinstance(session_state, str):
-            raise TypeError("Both error_msg, stack_trace and session_state must be strings.")
-
-        table_definitions: dict = json.load(open(PRJ_ROOT / "data/auth_files/big_query_table_def.json", "r"))
-
-        dataset_id = table_definitions["dataset_id"]
-        schema = table_definitions["schema"]
-        table = table_definitions["table"]
-        table_id = f"{dataset_id}.{schema}.{table}"
-
-        # Define schema for the table
-        schema = [
-            bigquery.SchemaField("record_id", "STRING"),
-            bigquery.SchemaField("session_state", "STRING"),
-            bigquery.SchemaField("error_msg", "STRING"),
-            bigquery.SchemaField("stack_trace", "STRING"),
-            bigquery.SchemaField("timestamp", "STRING"),
-        ]
-
-        # Create table if it does not exist
-        try:
-            table = self.__client.get_table(table_id)
-        except Exception:
-            table = bigquery.Table(table_id, schema=schema)
-            self.__client.create_table(table)
-        finally:
-            # Check if the table's schema matches the defined schema
-            existing_schema = {field.name for field in table.schema}
-            defined_schema = {field.name for field in schema}
-
-            # Find missing columns
-            missing_columns = defined_schema - existing_schema
-            if missing_columns:
-                # Add missing columns
-                new_fields = [field for field in schema if field.name in missing_columns]
-                table.schema += new_fields
-                self.__client.update_table(table, ["schema"])
-
-                logging.info(f"Added missing columns to table {table_id}: {missing_columns}")
-
-        uuid_str = str(uuid.uuid4())
-        rows = [{
-            "record_id": uuid_str,
-            "session_state": session_state,
-            "error_msg": error_msg,
-            "stack_trace": stack_trace,
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S%z")
-        }]
-
-        errors = self.__client.insert_rows_json(table_id, rows)
-        if errors:
-            logging.error("Error while inserting row to BigQuery:", errors)
-        else:
-            logging.info(f"Error row {uuid_str} added to BigQuery successfully.")

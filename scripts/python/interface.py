@@ -154,18 +154,23 @@ class FlightPricesChecker:
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
             # Initial max price
-            limit_min = int(price_graph_df["Price"].min())
-            limit_max = int(price_graph_df["Price"].max())
+            if len(price_graph_df) > 0:
+                limit_min = int(price_graph_df["Price"].min())
+                limit_max = int(price_graph_df["Price"].max())
+            else:
+                limit_min = 0
+                limit_max = 1
             help_msg = "_Only in this page_, the maximum price shown is an **estimate** based on Google's statistics"
             UIComponents.max_price_picker(limit_min_price=limit_min, limit_max_price=limit_max,
                                           on_change=self.__keep, help=help_msg)
 
-        #  Navigate to next page        
-        _, col = st.columns([0.8, 0.2])
-        with col:
-            if st.button(label="Search Offers", icon="🔍"):
-                st.session_state["price_graph_df"] = query_df
-                st.switch_page(self.__offers_pg)
+        #  Navigate to next page
+        if len(price_graph_df) > 0:
+            _, col = st.columns([0.8, 0.2])
+            with col:
+                if st.button(label="Search Offers", icon="🔍"):
+                    st.session_state["price_graph_df"] = query_df
+                    st.switch_page(self.__offers_pg)
 
     def offers(self):
         # TODO mettere un bottone di reset dei filtri

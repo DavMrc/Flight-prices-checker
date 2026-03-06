@@ -1,0 +1,37 @@
+# ─── Stage 1: Builder ────────────────────────────────────────────
+FROM python:3.12-alpine AS builder
+
+RUN apk add --no-cache binutils  # needed for strip
+
+WORKDIR /app
+COPY ./requirements.txt .
+
+RUN python3 -m venv /app/venv \
+    && . /app/venv/bin/activate \
+    && pip install --no-cache-dir -r requirements.txt \
+    # Remove pip — not needed at runtime
+    && pip uninstall -y pip \
+    # Remove pyarrow internals you almost certainly don't need
+    && find /app/venv -path "*/pyarrow/tests" -type d -exec rm -rf {} + && \
+    find /app/venv -path "*/pyarrow/gandiva*" -delete && \
+    find /app/venv -path "*/pyarrow/plasma*" -delete && \
+    # General cleanup
+    find /app/venv -name "*.pyc" -delete && \
+    find /app/venv -name "__pycache__" -type d -exec rm -rf {} + && \
+    find /app/venv -name "tests" -type d -exec rm -rf {} + && \
+    # Strip debug symbols from all shared libraries
+    find /app/venv -name "*.so*" -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+# ─── Stage 2: Runtime ────────────────────────────────────────────
+FROM python:3.12-alpine AS runtime
+
+WORKDIR /app
+COPY --from=builder /app/venv /app/venv
+COPY ./scripts/python/*.py /app/scripts/
+COPY ./data/airports.csv /app/data/airports.csv
+
+# Tell the shell to use the venv
+ENV PATH="/app/venv/bin:$PATH"
+
+EXPOSE 8080
+ENTRYPOINT ["streamlit", "run", "/app/scripts/main.py", "--server.port=8080"]
