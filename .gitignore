@@ -8,3 +8,6 @@ venv/
 # Testing
 data/samples/
 tests/
+
+# Deployment
+.env

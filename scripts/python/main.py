@@ -1,10 +1,8 @@
 import logging
-import os
 import traceback
 import streamlit as st
 import pandas as pd
 import altair as alt
-from helpers import get_project_root
 from interface import FlightPricesChecker
 from controller import FlightsController
 
@@ -19,11 +17,6 @@ logging.basicConfig(
 if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
     alt.theme.enable("powerbi")
-
-    # Set GCP auth credential
-    PRJ_ROOT = get_project_root()
-    credential_path = PRJ_ROOT / "data/auth_files/cloud_functions.json"
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path.resolve().as_posix()
 
     if "controller" not in st.session_state:
         controller = FlightsController()
