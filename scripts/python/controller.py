@@ -33,8 +33,17 @@ class FlightsController:
         self.airports = self.airports[self.airports["iata_code"].notna()
                                     & (self.airports["iata_code"] != "")
                                     & self.airports["type"].isin(airport_types)]
-        self.airports = self.airports[["iata_code", "name"]]
 
+        # Lat and lon
+        self.airports[["lat", "lon"]] = self.airports["coordinates"].str\
+            .split(", ", expand=True)\
+            .astype(float)\
+            .rename({0: "lat", 1: "lon"}, axis=1)
+
+        # Select fields
+        self.airports = self.airports[["iata_code", "name", "lat", "lon"]]
+
+        # Sort and reindex
         self.airports.sort_values("iata_code", inplace=True)
         self.airports.reset_index(drop=True, inplace=True)
 
@@ -54,7 +63,9 @@ class FlightsController:
             ls.append({
                 "index": i,
                 "iata_code": row["iata_code"],
-                "name": row["name"]
+                "name": row["name"],
+                "lat": row["lat"],
+                "lon": row["lon"]
             })
 
         return ls

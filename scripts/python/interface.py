@@ -1,5 +1,6 @@
 import streamlit as st
 import altair as alt
+import pydeck
 import pandas as pd
 import datetime
 import logging
@@ -80,7 +81,15 @@ class FlightPricesChecker:
         UIComponents.search_by_picker(on_change=self.__keep)
         
         # Airport selectboxes side by side
-        UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep)
+        if st.session_state["search_by"] == "map":
+            col1, col2 = st.columns(2)
+            with col1:
+                UIComponents.worldmap(key="dep_airport")
+
+            with col2:
+                UIComponents.worldmap(key="arr_airport")
+        else:
+            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep)
 
         # Date range input
         UIComponents.date_picker()
@@ -289,7 +298,7 @@ class UIComponents:
         if "search_by" not in st.session_state:
             st.session_state["search_by"] = "iata code"
 
-        st.radio("Search by", ["iata code", "airport name"], horizontal=True, key="_search_by",
+        st.radio("Search by", ["iata code", "airport name", "map"], horizontal=True, key="_search_by",
                  args=["search_by"], **kwargs)
 
     @staticmethod
@@ -372,6 +381,71 @@ class UIComponents:
         max_val = st.session_state["absolute_max_duration"] / 60
         st.slider("Max duration", value=max_val, min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
                     key="_max_duration", args=["max_duration"], **kwargs)
+
+    @staticmethod
+    def worldmap(**kwargs):
+        airports_json = st.session_state["airports_json"]
+        dep_arr_map_type = kwargs["key"]
+        layer_id = f"maplayer_{dep_arr_map_type}"
+
+        view_state = pydeck.ViewState(latitude=20, longitude=10, zoom=1.5, pitch=0)
+
+        layer = pydeck.Layer(
+            "ScatterplotLayer",
+            id=layer_id,
+            data=airports_json,
+            get_position="[lon, lat]",
+            get_color=[220, 60, 60, 200],
+            get_radius=40000,
+            radius_min_pixels=3,
+            radius_max_pixels=view_state.zoom * 3,
+            pickable=True,
+            auto_highlight=True,
+            highlight_color=[255, 200, 0, 220],
+        )
+
+        tooltip = {
+            "html": """
+                <div style="background:rgba(20,20,20,0.85); padding:8px 12px;
+                            border-radius:6px; font-family:monospace; font-size:13px;">
+                    <b style="color:#ffd166; font-size:15px;">{iata_code}</b><br/>
+                    {name}<br/>
+                </div>
+            """,
+            "style": {"backgroundColor": "transparent"},
+        }
+
+        deck = pydeck.Deck(
+            layers=[layer],
+            initial_view_state=view_state,
+            map_style="https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json",
+            tooltip=tooltip,
+        )
+
+        # Render with click selection callback
+        def callback():
+            event = st.session_state["_"+dep_arr_map_type]
+            if event:
+                objects: dict = event["selection"].get("objects", {})
+
+                if objects:
+                    # Get by layer key
+                    rows = objects.get(layer_id)
+                    selected_airport = None
+                    if rows:
+                        selected_airport = rows[0]
+
+                    # Set clicked airport
+                    if selected_airport:
+                        st.session_state[dep_arr_map_type] = selected_airport
+
+        st.pydeck_chart(deck, key="_"+dep_arr_map_type, on_select=callback)
+
+        # Write airport name and code
+        if dep_arr_map_type in st.session_state:
+            name = st.session_state[dep_arr_map_type]["name"]
+            iata_code = st.session_state[dep_arr_map_type]["iata_code"]
+            st.write(f"{iata_code} | {name}")
 
     # Flight offers widgets
     @staticmethod

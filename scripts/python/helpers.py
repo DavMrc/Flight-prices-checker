@@ -19,5 +19,5 @@ def gantt_chart_height_proportion(df) -> int:
 def get_project_root() -> pathlib.Path:
     """Returns the project root directory as a `pathlib.Path` object."""
     CURR_PATH = pathlib.Path(__file__)
-    PRJ_ROOT = CURR_PATH.parent.parent
+    PRJ_ROOT = CURR_PATH.parent.parent.parent
     return PRJ_ROOT
