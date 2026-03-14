@@ -19,7 +19,7 @@ class FlightsController:
         logging.info("Initializing FlightsController...")
 
         # GCP Cloud Function endpoints
-        base_url = os.environ.get("API_BASE_URL", "http://localhost:8080")
+        base_url = os.environ.get("API_BASE_URL", "http://localhost:8081")
         self.endpoints = {
             "getOffers": f"{base_url}/getOffers",
             "getPriceGraph": f"{base_url}/getPriceGraph",
