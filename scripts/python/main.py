@@ -1,3 +1,21 @@
+# Caveat to avoid Streamlit useless warns about caching
+import sys
+
+class FilteredStderr:
+    def __init__(self, original):
+        self.original = original
+
+    def write(self, text):
+        # Filter out this Streamlit warning message
+        if "No runtime found, using MemoryCacheStorageManager" not in text:
+            self.original.write(text)
+
+    def flush(self):
+        self.original.flush()
+
+sys.stderr = FilteredStderr(sys.stderr)
+
+# Begin script
 import logging
 import traceback
 import streamlit as st
@@ -6,18 +24,17 @@ import altair as alt
 from interface import FlightPricesChecker
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-
 if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
     alt.theme.enable("powerbi")
 
-    app = FlightPricesChecker.init()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    app: FlightPricesChecker = FlightPricesChecker.init()
     try:
         app.run()
     except Exception as e:

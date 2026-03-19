@@ -235,13 +235,33 @@ class FlightPricesChecker:
             # Range slider for minDays and maxDays
             UIComponents.min_max_days_picker(on_change=self.__keep, disabled=True)
 
-            # Max price
-            min_price = merged_df_orig["fullPrice"].min()
-            max_price = merged_df_orig["fullPrice"].max()
-            UIComponents.max_price_picker(limit_min_price=min_price, limit_max_price=max_price, on_change=self.__keep)
+            if len(merged_df_orig) > 0:
+                # Max price
+                min_price = int(merged_df_orig["fullPrice"].min())
+                max_price = int(merged_df_orig["fullPrice"].max())
+                UIComponents.max_price_picker(limit_min_price=min_price,
+                                              limit_max_price=max_price, on_change=self.__keep)
 
-            # Max duration slider
-            UIComponents.max_duration_picker(on_change=self.__keep)
+                # Max duration slider
+                UIComponents.max_duration_picker(on_change=self.__keep)
+
+    def _debug_dfs_ss(self):
+        """
+        Call this function inside a page to debug the current session state and dataframes.
+        """
+        params = self._ss_query_params()
+        price_graph_df: pd.DataFrame = self.controller.get_price_graph(params)
+        outb_df: pd.DataFrame = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
+        inb_df: pd.DataFrame = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
+        merged_df: pd.DataFrame = self.controller.merge_offers(outb_df, inb_df)
+
+        names = ["Session state", "Price Graph", "Outbound", "Inbound", "Merged"]
+        objs = [st.session_state, price_graph_df, outb_df, inb_df, merged_df]
+
+        tabs = st.tabs(names)
+        for tab, obj in zip(tabs, objs):
+            with tab:
+                st.write(obj)
 
 
 class UIComponents:
@@ -338,11 +358,8 @@ class UIComponents:
 
     @staticmethod
     def max_price_picker(limit_max_price:int, limit_min_price:int=0, **kwargs):
-        if "max_price" in st.session_state:
-            curr_price = st.session_state["max_price"]
-        else:
-            curr_price = limit_max_price
-            st.session_state["max_price"] = limit_max_price
+        ss_params: dict = st.session_state["params"]
+        curr_price = ss_params.get("max_price", limit_max_price)
         
         if limit_min_price == limit_max_price:
             limit_min_price = limit_max_price - 1
