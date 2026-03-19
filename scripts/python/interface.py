@@ -24,15 +24,45 @@ class FlightPricesChecker:
     def init():
         return FlightPricesChecker()
 
-    def __keep(self, key):
+    def __keep(self, key: str):
         # https://stackoverflow.com/a/76211845
-        st.session_state[key] = st.session_state['_'+key]
+        if "." in key:
+            parts = key.split(".")
+            pkey = parts[0]
+            skey = parts[1]
+            st.session_state[pkey][skey] = st.session_state['_'+skey]
+        else:
+            st.session_state[key] = st.session_state['_'+key]
 
     def __airport_option_fmt(self, option):
         if st.session_state["search_by"] == "iata code":
             return option["iata_code"]
         else:
             return option["name"]
+
+    def _ss_query_params(self) -> dict:
+        """
+        Get query params from session state
+        """
+        ss_params: dict = st.session_state["params"]
+
+        start_date, end_date = ss_params["date_range"]
+        min_days, max_days = ss_params["days_range"]
+        max_price = ss_params.get("max_price", 0)
+        max_duration = ss_params.get("max_duration", -1) * 60
+        dep_airport_iata = ss_params["dep_airport"]["iata_code"]
+        arr_airport_iata = ss_params["arr_airport"]["iata_code"]
+
+        return {
+            "departureAirport" : dep_airport_iata,
+            "destinationAirport" : arr_airport_iata,
+            "startDate" : start_date.strftime("%Y-%m-%d"),
+            "returnDate" : end_date.strftime("%Y-%m-%d"),
+            "minDays" : min_days,
+            "maxDays" : max_days,
+            "maxPrice": max_price,
+            "maxDuration": max_duration
+        }
 
     def run(self):
         app_name = "Flight Prices Checker"
@@ -55,7 +85,10 @@ class FlightPricesChecker:
         # Title of the app
         st.title("Flight Prices Checker", anchor=False)
 
-        # Dropdown to select between "iata code" and "airport name"
+        # Set default dict to hold search parameters
+        st.session_state.setdefault("params", {})
+
+        # Airport selection mode
         UIComponents.search_by_picker(on_change=self.__keep)
         
         # Airport selectboxes side by side
@@ -89,22 +122,7 @@ class FlightPricesChecker:
         if st.button(label="Back", icon="⬅"):
             st.switch_page(self.__home_pg)
 
-        start_date, end_date = st.session_state["date_range"]
-        min_days, max_days = st.session_state["days_range"]
-        max_price = 0
-        if "max_price" in st.session_state:
-            max_price = st.session_state["max_price"]
-
-        params = {
-            "departureAirport" : st.session_state["dep_airport"]["iata_code"],
-            "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
-            "startDate" : start_date.strftime("%Y-%m-%d"),
-            "returnDate" : end_date.strftime("%Y-%m-%d"),
-            "minDays" : min_days,
-            "maxDays" : max_days,
-            "maxPrice": max_price,
-            "maxDuration": -1
-        }
+        params = self._ss_query_params()
 
         col1, col2 = st.columns([0.2, 0.8])
         with col2:
@@ -166,23 +184,7 @@ class FlightPricesChecker:
         # First displayed col2 so that session state is updated with
         # all necessary values
         with col2:
-            start_date, end_date = st.session_state["date_range"]
-            min_days, max_days = st.session_state["days_range"]
-
-            max_duration = -1
-            if "max_duration" in st.session_state:
-                max_duration = st.session_state["max_duration"] * 60
-
-            params = {
-                "departureAirport" : st.session_state["dep_airport"]["iata_code"],
-                "destinationAirport" : st.session_state["arr_airport"]["iata_code"],
-                "startDate" : start_date.strftime("%Y-%m-%d"),
-                "returnDate" : end_date.strftime("%Y-%m-%d"),
-                "minDays" : min_days,
-                "maxDays" : max_days,
-                "maxPrice" : st.session_state["max_price"],
-                "maxDuration": max_duration
-            }
+            params = self._ss_query_params()
 
             with st.spinner(show_time=True):
                 price_graph_df: pd.DataFrame = self.controller.get_price_graph(params)
@@ -275,32 +277,37 @@ class UIComponents:
             ix = 0
             if "dep_airport" in st.session_state:
                 ix = st.session_state["dep_airport"]["index"]
+            elif "dep_airport" in st.session_state["params"]:
+                ix = st.session_state["params"]["dep_airport"]["index"]
 
             st.selectbox("Departure", options=airports_json, key="_dep_airport", index=ix,
-                         args=["dep_airport"], **kwargs)
+                         args=["params.dep_airport"], **kwargs)
         with col2:
             ix = 0
             if "arr_airport" in st.session_state:
                 ix = st.session_state["arr_airport"]["index"]
+            elif "arr_airport" in st.session_state["params"]:
+                ix = st.session_state["params"]["arr_airport"]["index"]
 
             st.selectbox("Arrival", options=airports_json, key="_arr_airport", index=ix,
-                         args=["arr_airport"], **kwargs)
+                         args=["params.arr_airport"], **kwargs)
 
     @staticmethod
     def date_picker(**kwargs):
-        if "date_range" not in st.session_state:
+        ss_params: dict = st.session_state["params"]
+        if "date_range" not in ss_params:
             range_min_date = datetime.date.today()
             range_max_date = range_min_date + datetime.timedelta(days=1)
-            st.session_state["date_range"] = (range_min_date, range_max_date)
+            ss_params["date_range"] = (range_min_date, range_max_date)
 
-        range_min_date, range_max_date = st.session_state["date_range"]
+        range_min_date, range_max_date = ss_params["date_range"]
         # TODO: l'utente può fare brute-force insert di una data, facendo fallire il widget
         selected_dates = st.date_input("Select Date Range", value=(range_min_date, range_max_date),
                                         min_value=datetime.date.today(), **kwargs)
 
         if len(selected_dates) == 2:
-            if st.session_state["date_range"] != selected_dates:
-                st.session_state["date_range"] = selected_dates
+            if ss_params["date_range"] != selected_dates:
+                ss_params["date_range"] = selected_dates
                 # When the user selected only one date, the execution stopped
                 # (see line below). Here, we rerun the app so that the app
                 # "restarts" working
@@ -312,11 +319,12 @@ class UIComponents:
 
     @staticmethod
     def min_max_days_picker(**kwargs):
-        if "date_range" in st.session_state and len(st.session_state["date_range"]) == 2:
-            start_date, end_date = st.session_state["date_range"]
+        ss_params: dict = st.session_state["params"]
+        if ss_params.get("date_range") and len(ss_params["date_range"]) == 2:
+            start_date, end_date = ss_params["date_range"]
 
-            if "days_range" in st.session_state:
-                min_days, max_days = st.session_state["days_range"]
+            if ss_params.get("days_range"):
+                min_days, max_days = ss_params["days_range"]
                 limit_max = (end_date - start_date).days
                 limit_max = max(limit_max, 1)
             else:
@@ -326,7 +334,7 @@ class UIComponents:
                 limit_max = max_days
 
         st.slider("Select range of days", 0, limit_max, (min_days, max_days),
-                key="_days_range", args=["days_range"], **kwargs)
+                key="_days_range", args=["params.days_range"], **kwargs)
 
     @staticmethod
     def max_price_picker(limit_max_price:int, limit_min_price:int=0, **kwargs):
@@ -340,13 +348,13 @@ class UIComponents:
             limit_min_price = limit_max_price - 1
 
         st.slider("Max Price", min_value=limit_min_price, max_value=limit_max_price, value=curr_price,
-                    key="_max_price", args=['max_price'], **kwargs)
+                    key="_max_price", args=['params.max_price'], **kwargs)
 
     @staticmethod
     def max_duration_picker(**kwargs):
         max_val = st.session_state["absolute_max_duration"] / 60
         st.slider("Max duration", value=max_val, min_value=0.0, max_value=max_val, step=0.5, format="%0.1f hrs",
-                    key="_max_duration", args=["max_duration"], **kwargs)
+                    key="_max_duration", args=["params.max_duration"], **kwargs)
 
     @staticmethod
     def worldmap(airports_json: dict, **kwargs):
@@ -402,14 +410,14 @@ class UIComponents:
 
                     # Set clicked airport
                     if selected_airport:
-                        st.session_state[dep_arr_map_type] = selected_airport
+                        st.session_state["params"][dep_arr_map_type] = selected_airport
 
         st.pydeck_chart(deck, key="_"+dep_arr_map_type, on_select=callback)
 
         # Write airport name and code
-        if dep_arr_map_type in st.session_state:
-            name = st.session_state[dep_arr_map_type]["name"]
-            iata_code = st.session_state[dep_arr_map_type]["iata_code"]
+        if st.session_state["params"].get(dep_arr_map_type, None):
+            name = st.session_state["params"][dep_arr_map_type]["name"]
+            iata_code = st.session_state["params"][dep_arr_map_type]["iata_code"]
             st.write(f"{iata_code} | {name}")
 
     # Flight offers widgets
