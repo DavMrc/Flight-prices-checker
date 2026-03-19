@@ -6,14 +6,18 @@ import logging
 import datetime
 import concurrent.futures
 import pandas as pd
-from helpers import get_project_root
+import streamlit as st
+from dataclasses import dataclass
+from helpers import get_project_root, fmt_list
 from typing import List
 from my_enums import TripType
 
 
 PRJ_ROOT = get_project_root()
+TTL = datetime.timedelta(minutes=15)
 
 
+@dataclass
 class FlightsController:
     def __init__(self):
         logging.info("Initializing FlightsController...")
@@ -47,6 +51,12 @@ class FlightsController:
         self.airports.sort_values("iata_code", inplace=True)
         self.airports.reset_index(drop=True, inplace=True)
 
+    @st.cache_data
+    @staticmethod
+    def init():
+        return FlightsController()
+
+    @st.cache_data(ttl=TTL)
     def get_airports_json(self) -> List[dict]:
         """
         Returns the airports data as a list of dictionaries like so:
@@ -71,11 +81,12 @@ class FlightsController:
         return ls
 
     # --- Price graph ---
-    def get_price_graph(self, params: dict) -> pd.DataFrame:
-        logging.info(f"API Request for getPriceGraph\n{params}")
+    @st.cache_data(ttl=TTL)
+    def get_price_graph(self, _params: dict) -> pd.DataFrame:
+        logging.info(f"API Request for getPriceGraph\n{_params}")
         response = requests.post(
             url=self.endpoints["getPriceGraph"],
-            json=params
+            json=_params
         )
 
         if response.status_code != 200:
@@ -110,11 +121,12 @@ class FlightsController:
         return price_graph_df
 
     # --- Offers ---
-    def get_offers(self, reference_df: pd.DataFrame, params: dict, trip_type: TripType) -> pd.DataFrame:
+    @st.cache_data(ttl=TTL)
+    def get_offers(self, reference_df: pd.DataFrame, _params: dict, trip_type: TripType) -> pd.DataFrame:
         """
         Takes advantage of `futures` to invoke `_get_offer_df()` in parallel
         """
-        logging.info(f"API Request for {trip_type} getOffers\n{params}")
+        logging.info(f"API Request for {trip_type} getOffers\n{_params}")
 
         # Setting parameters and columns
         departureAirport = None
@@ -127,14 +139,14 @@ class FlightsController:
             reference_df = reference_df.sort_values(['returnDate', 'fakeReturnDate']).reset_index(drop=True)
             reference_df = reference_df.rename(columns={'returnDate': 'startDate', 'fakeReturnDate': 'returnDate'})
 
-            departureAirport = params["destinationAirport"]
-            destinationAirport = params["departureAirport"]
+            departureAirport = _params["destinationAirport"]
+            destinationAirport = _params["departureAirport"]
         else:
             reference_df = reference_df[['startDate', 'returnDate']].copy()  # Same as above
             reference_df = reference_df.drop_duplicates(subset=['startDate', 'returnDate'], ignore_index=True)
 
-            departureAirport = params["departureAirport"]
-            destinationAirport = params["destinationAirport"]
+            departureAirport = _params["departureAirport"]
+            destinationAirport = _params["destinationAirport"]
 
         # Process requests
         responses = []
@@ -169,7 +181,7 @@ class FlightsController:
         df["flightDuration"] = (df["arrivalTime"] - df["departureTime"]).dt.total_seconds() // 60
         # Preliminary filter: if the price of even a single one-way route
         # exceeds maxPrice, the whole combination will as well
-        df = df[df["price"] <= params["maxPrice"]]
+        df = df[df["price"] <= _params["maxPrice"]]
         df.reset_index(drop=True, inplace=True)
 
         return df
@@ -232,8 +244,9 @@ class FlightsController:
         
         return pd.DataFrame(flights)
 
+    @st.cache_data(ttl=TTL)
     def merge_offers(self, outb_df: pd.DataFrame, inb_df: pd.DataFrame) -> pd.DataFrame:
-        def group(df) -> pd.DataFrame:
+        def group(df: pd.DataFrame) -> pd.DataFrame:
             grouped = df\
                 .groupby(['offerID', 'startDate', 'returnDate'])\
                 .agg({
@@ -244,6 +257,8 @@ class FlightsController:
                     'departureAirport': list,
                     'arrivalAirport': list
                 })
+            grouped[["departureAirport", "arrivalAirport"]] = \
+                grouped[["departureAirport", "arrivalAirport"]].map(fmt_list)
             grouped.reset_index(inplace=True)
             grouped["layovers"] = grouped["chainID"] - 1
             grouped["totalDuration"] = pd.to_timedelta(
@@ -287,6 +302,7 @@ class FlightsController:
         full_offers.reset_index(drop=True, inplace=True)
         return full_offers
 
+    @st.cache_data(ttl=TTL)
     def filter_merged_offers(self, merged_df: pd.DataFrame, params: dict) -> pd.DataFrame:
         """
         Filters merged offers based on `params["maxPrice"]` and `params["maxDuration"]`.
@@ -331,6 +347,7 @@ class FlightsController:
         return pd.concat([inb_duration_minutes, outb_duration_minutes])
 
     # --- Charts ---
+    @st.cache_data
     def flight_duration_barchart(self, merged_df: pd.DataFrame) -> pd.DataFrame:
         combined_durations = self._concat_offers_duration(merged_df)
 
@@ -350,6 +367,7 @@ class FlightsController:
 
         return duration_df
 
+    @st.cache_data
     def flight_count_heatmap(self, merged_df: pd.DataFrame) -> pd.DataFrame:
         df = merged_df[["departureTime_Outbound",  "departureTime_Inbound",
                 "offerID_Inbound", "offerID_Outbound", "fullPrice"]].copy()

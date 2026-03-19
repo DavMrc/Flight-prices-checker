@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from interface import FlightPricesChecker
-from controller import FlightsController
 
 
 logging.basicConfig(
@@ -18,18 +17,15 @@ if __name__ == "__main__":
     pd.options.mode.copy_on_write = True
     alt.theme.enable("powerbi")
 
-    if "controller" not in st.session_state:
-        controller = FlightsController()
-        st.session_state["controller"] = controller
-    
-    if "interface" not in st.session_state:
-        st.session_state["interface"] = FlightPricesChecker()
-
-    app: FlightPricesChecker = st.session_state["interface"]
+    app = FlightPricesChecker.init()
     try:
         app.run()
     except Exception as e:
-        st.error("An error occurred while running the app.")
         t = traceback.format_exception(e)
         stack_trace = "".join(t)
         logging.error(f"An error occurred:\n{stack_trace}")
+
+        # Display error in the app
+        st.error("An error occurred while running the app.")
+        with st.expander("Details"):
+            st.code(stack_trace)

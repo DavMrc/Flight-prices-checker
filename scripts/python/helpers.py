@@ -11,6 +11,11 @@ def fmt_duration(duration: datetime.timedelta) -> str:
     return f"{int(hours):02} hrs {int(minutes):02} min"
 
 
+def fmt_list(l: list) -> str:
+    s = ", ".join(l)
+    return f"[{s}]"
+
+
 def gantt_chart_height_proportion(df) -> int:
     """80 + `len(df)` * 18"""
     return 80 + len(df) * 18

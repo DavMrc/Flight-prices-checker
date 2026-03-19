@@ -4,19 +4,25 @@ import pydeck
 import pandas as pd
 import datetime
 import logging
+from dataclasses import dataclass
 from my_enums import TripType
 from controller import FlightsController
 from helpers import fmt_duration, gantt_chart_height_proportion
 
 
+@dataclass
 class FlightPricesChecker:
+    _tab_icon = ":material/travel:"
+
     def __init__(self):
         logging.info("Initializing FlightPricesChecker...")
-        self.controller: FlightsController = st.session_state["controller"]
+        self.controller: FlightsController = FlightsController.init()
+        self.airports_json: dict = self.controller.get_airports_json()
 
-        if "airports_json" not in st.session_state:
-            airports_json = self.controller.get_airports_json()
-            st.session_state["airports_json"] = airports_json
+    @st.cache_data
+    @staticmethod
+    def init():
+        return FlightPricesChecker()
 
     def __keep(self, key):
         # https://stackoverflow.com/a/76211845
@@ -28,39 +34,11 @@ class FlightPricesChecker:
         else:
             return option["name"]
 
-    def __create_debug_session__(self):
-        if "debug" not in st.session_state:
-            import json
-            # Load dumped session state
-            path = "F:/Programmazione/Flight prices checker/data"
-            sess_state_debug: dict = json.load(open(path+"/debugging-st-session.json"))
-            sess_state: dict = sess_state_debug
-            date_cols = ["date_range", "_date_range"]
-
-            for col in date_cols:
-                parsed_date_list = []
-                for date_str in sess_state_debug[col]:
-                    parsed_date = datetime.datetime.fromisoformat(date_str).date()
-                    parsed_date_list.append(parsed_date)
-                
-                sess_state.update({col: parsed_date_list})
-            
-            st.session_state.update(sess_state)
-
-            # --- Load dataframes
-            inb_df = pd.read_pickle(path+"/samples/inb_df.pkl")
-            outb_df = pd.read_pickle(path+"/samples/outb_df.pkl")
-            merged_df_orig = pd.read_pickle(path+"/samples/merged_df_orig.pkl")
-
-            st.session_state["inb_df"] = inb_df
-            st.session_state["outb_df"] = outb_df
-            st.session_state["merged_df"] = merged_df_orig
-            st.session_state["debug"] = True
-
     def run(self):
-        self.__home_pg = st.Page(self.home, title="Home")
-        self.__flights_pg = st.Page(self.flights, title="Flights")
-        self.__offers_pg = st.Page(self.offers, title="Offers")
+        app_name = "Flight Prices Checker"
+        self.__home_pg = st.Page(self.home, title=f"Home - {app_name}")
+        self.__flights_pg = st.Page(self.flights, title=f"Flights - {app_name}")
+        self.__offers_pg = st.Page(self.offers, title=f"Offers - {app_name}")
 
         nav = st.navigation(
             [
@@ -73,7 +51,7 @@ class FlightPricesChecker:
         nav.run()
 
     def home(self):
-        st.set_page_config(layout="centered")
+        st.set_page_config(layout="centered", page_icon=self._tab_icon)
         # Title of the app
         st.title("Flight Prices Checker", anchor=False)
 
@@ -84,12 +62,13 @@ class FlightPricesChecker:
         if st.session_state["search_by"] == "map":
             col1, col2 = st.columns(2)
             with col1:
-                UIComponents.worldmap(key="dep_airport")
+                UIComponents.worldmap(self.airports_json, key="dep_airport")
 
             with col2:
-                UIComponents.worldmap(key="arr_airport")
+                UIComponents.worldmap(self.airports_json, key="arr_airport")
         else:
-            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep)
+            UIComponents.airport_pickers(self.airports_json, 
+                                         format_func=self.__airport_option_fmt, on_change=self.__keep)
 
         # Date range input
         UIComponents.date_picker()
@@ -105,12 +84,9 @@ class FlightPricesChecker:
 
     def flights(self):
         # TODO aggiungere barra KPI
-        st.set_page_config(layout="wide")
+        st.set_page_config(layout="wide", page_icon=self._tab_icon)
 
         if st.button(label="Back", icon="⬅"):
-            # Remove price_graph_df so that next time the user
-            # goes back to this page, the graph is reloaded
-            st.session_state.pop("price_graph_df")
             st.switch_page(self.__home_pg)
 
         start_date, end_date = st.session_state["date_range"]
@@ -126,17 +102,14 @@ class FlightPricesChecker:
             "returnDate" : end_date.strftime("%Y-%m-%d"),
             "minDays" : min_days,
             "maxDays" : max_days,
-            "maxPrice": max_price
+            "maxPrice": max_price,
+            "maxDuration": -1
         }
 
         col1, col2 = st.columns([0.2, 0.8])
         with col2:
             with st.spinner("Loading alternatives...", show_time=True):
-                if "price_graph_df" not in st.session_state:
-                    price_graph_df = self.controller.get_price_graph(params)
-                    st.session_state["price_graph_df"] = price_graph_df
-
-                price_graph_df: pd.DataFrame = st.session_state["price_graph_df"]
+                price_graph_df: pd.DataFrame = self.controller.get_price_graph(params)
                 query_df = self.controller.filter_price_graph(price_graph_df, params)
 
                 if len(query_df) > 0:
@@ -154,7 +127,8 @@ class FlightPricesChecker:
 
         with col1:
             # Display selected airports
-            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
+            UIComponents.airport_pickers(self.airports_json, disabled=True,
+                                         format_func=self.__airport_option_fmt, on_change=self.__keep)
 
             # Date range input
             UIComponents.date_picker(disabled=True)
@@ -178,16 +152,14 @@ class FlightPricesChecker:
             _, col = st.columns([0.8, 0.2])
             with col:
                 if st.button(label="Search Offers", icon="🔍"):
-                    st.session_state["price_graph_df"] = query_df
                     st.switch_page(self.__offers_pg)
 
     def offers(self):
         # TODO mettere un bottone di reset dei filtri
         # TODO aggiungere barra KPI
-        st.set_page_config(layout="wide")
+        st.set_page_config(layout="wide", page_icon=self._tab_icon)
 
         if st.button(label="Back", icon="⬅"):
-            st.session_state.pop("merged_df")
             st.switch_page(self.__flights_pg)
 
         col1, col2 = st.columns([0.2, 0.8])
@@ -212,18 +184,12 @@ class FlightPricesChecker:
                 "maxDuration": max_duration
             }
 
-            if "merged_df" not in st.session_state:
-                with st.spinner(show_time=True):
-                    price_graph_df = st.session_state["price_graph_df"]
-                    outb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
-                    inb_df = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
-                    merged_df = self.controller.merge_offers(outb_df, inb_df)
-
-                st.session_state["outb_df"] = outb_df
-                st.session_state["inb_df"] = inb_df
-                st.session_state["merged_df"] = merged_df
-
-            merged_df_orig: pd.DataFrame = st.session_state["merged_df"]
+            with st.spinner(show_time=True):
+                price_graph_df: pd.DataFrame = self.controller.get_price_graph(params)
+                outb_df: pd.DataFrame = self.controller.get_offers(price_graph_df, params, trip_type=TripType.OUTBOUND)
+                inb_df: pd.DataFrame = self.controller.get_offers(price_graph_df, params, trip_type=TripType.INBOUND)
+                merged_df: pd.DataFrame = self.controller.merge_offers(outb_df, inb_df)
+                merged_df_orig = merged_df.copy()
 
             if "absolute_max_duration" not in st.session_state:
                 st.session_state["absolute_max_duration"] = self.controller._concat_offers_duration(merged_df_orig).max()
@@ -236,29 +202,30 @@ class FlightPricesChecker:
                 if selection and selection[0]["Number of Flights"] > 0:
                     params.update({"selected_heatmap_point": selection[0]})
 
-            merged_df = self.controller.filter_merged_offers(merged_df_orig, params)
+            merged_df: pd.DataFrame = self.controller.filter_merged_offers(merged_df_orig, params)
             if len(merged_df) > 0:
                 col1_s, col2_s = st.columns(2)
                 with col1_s:
                     # Flight count heatmap
-                    heatmap_data = self.controller.flight_count_heatmap(merged_df)
+                    heatmap_data: pd.DataFrame = self.controller.flight_count_heatmap(merged_df)
                     UIComponents.flight_count_heatmap(heatmap_data)
                 
                 with col2_s:
                     # Flight duration barchart
-                    duration_df = self.controller.flight_duration_barchart(merged_df)
+                    duration_df: pd.DataFrame = self.controller.flight_duration_barchart(merged_df)
                     UIComponents.flight_duration_barchart(duration_df)
 
                 # Offer list
                 # TODO rendere parametrizzabile
                 per_page_rows = 5
-                UIComponents.offer_list(merged_df, per_page_rows)
+                UIComponents.offer_list(inb_df, outb_df, merged_df, per_page_rows)
             else:
                 st.write("There are no offers matching the applied filters.")
-        
+
         with col1:
             # Display selected airports
-            UIComponents.airport_pickers(format_func=self.__airport_option_fmt, on_change=self.__keep, disabled=True)
+            UIComponents.airport_pickers(self.airports_json, disabled=True,
+                                         format_func=self.__airport_option_fmt, on_change=self.__keep)
 
             # Date range input
             UIComponents.date_picker(disabled=True)
@@ -302,8 +269,7 @@ class UIComponents:
                  args=["search_by"], **kwargs)
 
     @staticmethod
-    def airport_pickers(**kwargs):
-        airports_json = st.session_state["airports_json"]
+    def airport_pickers(airports_json: dict, **kwargs):
         col1, col2 = st.columns(2)
         with col1:
             ix = 0
@@ -383,8 +349,7 @@ class UIComponents:
                     key="_max_duration", args=["max_duration"], **kwargs)
 
     @staticmethod
-    def worldmap(**kwargs):
-        airports_json = st.session_state["airports_json"]
+    def worldmap(airports_json: dict, **kwargs):
         dep_arr_map_type = kwargs["key"]
         layer_id = f"maplayer_{dep_arr_map_type}"
 
@@ -528,7 +493,7 @@ class UIComponents:
         return f'{dep_date_fmt} - {ret_date_fmt} | {price}'
 
     @staticmethod
-    def offer_list(merged_df: pd.DataFrame, per_page_rows: int):
+    def offer_list(inbound_df: pd.DataFrame, outbound_df: pd.DataFrame, merged_df: pd.DataFrame, per_page_rows: int):
         """
         UI component that shows a vertical list of exactely `per_page_rows` `UIComponents.offer()` elements. 
         """
@@ -575,16 +540,13 @@ class UIComponents:
 
         # --- ITERATING OVER OFFERS ---
         with offers_container:
-            outb_df: pd.DataFrame = st.session_state["outb_df"]
-            inb_df: pd.DataFrame = st.session_state["inb_df"]
-
             start_idx = page_no * per_page_rows
             end_idx = (1 + page_no) * per_page_rows
 
             unique_offers = merged_df[start_idx:end_idx]
             for row in unique_offers.itertuples():
-                outb_chunk = outb_df[row.offerID_Outbound == outb_df["offerID"]]
-                inb_chunk = inb_df[row.offerID_Inbound == inb_df["offerID"]]
+                outb_chunk = outbound_df[row.offerID_Outbound == outbound_df["offerID"]]
+                inb_chunk = inbound_df[row.offerID_Inbound == inbound_df["offerID"]]
 
                 # Raise error if either chunk is empty
                 error_msg = " offers chunk is empty"
@@ -628,7 +590,7 @@ class UIComponents:
             }
         }
 
-        st.altair_chart(gantt, use_container_width=True)
+        st.altair_chart(gantt)
 
     @classmethod
     def flight_count_heatmap(cls, heatmap_data: pd.DataFrame):
@@ -667,7 +629,7 @@ class UIComponents:
         }
 
         # Display the heatmap in Streamlit
-        st.altair_chart(heatmap, on_select="rerun", use_container_width=True, key="selected_heatmap_point")
+        st.altair_chart(heatmap, on_select="rerun", key="selected_heatmap_point")
         # Sample of return of a selection click
         # {
         #     "selection": {
@@ -702,4 +664,4 @@ class UIComponents:
             }
         }
 
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart)
