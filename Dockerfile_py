@@ -1,4 +1,4 @@
-# ─── Stage 1: Builder ────────────────────────────────────────────
+# Stage 1: Builder
 FROM python:3.12-alpine AS builder
 
 RUN apk add --no-cache binutils  # needed for strip
@@ -22,16 +22,16 @@ RUN python3 -m venv /app/venv \
     # Strip debug symbols from all shared libraries
     find /app/venv -name "*.so*" -exec strip --strip-unneeded {} + 2>/dev/null || true
 
-# ─── Stage 2: Runtime ────────────────────────────────────────────
+# Stage 2: Runtime
 FROM python:3.12-alpine AS runtime
 
 WORKDIR /app
 COPY --from=builder /app/venv /app/venv
-COPY ./scripts/python/*.py /app/scripts/
+COPY ./scripts/python/*.py /app/scripts/python/
 COPY ./data/airports.csv /app/data/airports.csv
 
 # Tell the shell to use the venv
 ENV PATH="/app/venv/bin:$PATH"
 
 EXPOSE 8080
-ENTRYPOINT ["streamlit", "run", "/app/scripts/main.py", "--server.port=8080"]
+ENTRYPOINT ["streamlit", "run", "/app/scripts/python/main.py", "--server.port=8080"]
